@@ -1,0 +1,276 @@
+---
+title: useChat
+description: API reference for the useChat hook
+---
+
+React hook for building chat interfaces with AI language models.
+
+```typescript
+import { useChat } from 'ai/react';
+
+export default function Chat() {
+  const { messages, sendMessage, status } = useChat();
+
+  return (
+    <div>
+      {messages.map((message) => (
+        <div key={message.id}>
+          <strong>{message.role}:</strong> {message.content}
+        </div>
+      ))}
+      
+      <button
+        onClick={() => sendMessage({ content: 'Hello!' })}
+        disabled={status === 'in_progress'}
+      >
+        Send
+      </button>
+    </div>
+  );
+}
+```
+
+## Parameters
+
+<ParamField path="id" type="string">
+  A unique identifier for the chat. If not provided, a random ID will be generated.
+  When provided, the `useChat` hook with the same `id` will share states across components.
+</ParamField>
+
+<ParamField path="chat" type="Chat">
+  An existing Chat instance. When provided, the hook will use this instance instead of creating a new one.
+</ParamField>
+
+<ParamField path="api" type="string" default="/api/chat">
+  The API endpoint that accepts a `{ messages }` object and returns a stream of tokens of the AI chat response.
+</ParamField>
+
+<ParamField path="initialMessages" type="Array<UIMessage>">
+  Initial messages to be used in the chat.
+</ParamField>
+
+<ParamField path="onToolCall" type="(toolCall: ToolCall) => void">
+  Callback function to be called when a tool call is received.
+</ParamField>
+
+<ParamField path="onData" type="(data: JSONValue) => void">
+  Callback function to be called when data is received from the stream.
+</ParamField>
+
+<ParamField path="onFinish" type="(message: UIMessage) => void">
+  Callback function to be called when the response is complete.
+</ParamField>
+
+<ParamField path="onError" type="(error: Error) => void">
+  Callback function to be called when an error occurs.
+</ParamField>
+
+<ParamField path="sendAutomaticallyWhen" type="(message: UIMessage) => boolean">
+  Function that determines whether to automatically send a message.
+</ParamField>
+
+<ParamField path="experimental_throttle" type="number">
+  Custom throttle wait in milliseconds for the chat messages and data updates.
+  Default is undefined, which disables throttling.
+</ParamField>
+
+<ParamField path="resume" type="boolean" default="false">
+  Whether to resume an ongoing chat generation stream.
+</ParamField>
+
+## Returns
+
+<ResponseField name="id" type="string">
+  The ID of the chat.
+</ResponseField>
+
+<ResponseField name="messages" type="Array<UIMessage>">
+  The current array of chat messages.
+</ResponseField>
+
+<ResponseField name="setMessages" type="(messages: UIMessage[] | ((messages: UIMessage[]) => UIMessage[])) => void">
+  Update the messages state locally. This is useful when you want to edit the messages on the client,
+  and then trigger the `regenerate` method manually to regenerate the AI response.
+</ResponseField>
+
+<ResponseField name="sendMessage" type="(message: CreateUIMessage) => void">
+  Send a new message to the API endpoint.
+</ResponseField>
+
+<ResponseField name="regenerate" type="() => void">
+  Regenerate the last AI response.
+</ResponseField>
+
+<ResponseField name="stop" type="() => void">
+  Stop the current stream.
+</ResponseField>
+
+<ResponseField name="resumeStream" type="() => void">
+  Resume a previously stopped stream.
+</ResponseField>
+
+<ResponseField name="status" type="'idle' | 'in_progress' | 'awaiting_message'">
+  The current status of the chat.
+  - `'idle'`: No active generation
+  - `'in_progress'`: Currently generating a response
+  - `'awaiting_message'`: Waiting for user input
+</ResponseField>
+
+<ResponseField name="error" type="Error | undefined">
+  The error object if an error occurred.
+</ResponseField>
+
+<ResponseField name="clearError" type="() => void">
+  Clear the current error.
+</ResponseField>
+
+<ResponseField name="addToolResult" type="(toolResult: ToolResult) => void">
+  Add a tool result to the chat. Deprecated: use `addToolOutput` instead.
+</ResponseField>
+
+<ResponseField name="addToolOutput" type="(toolOutput: ToolOutput) => void">
+  Add a tool output to the chat.
+</ResponseField>
+
+<ResponseField name="addToolApprovalResponse" type="(response: ToolApprovalResponse) => void">
+  Add a tool approval response to the chat.
+</ResponseField>
+
+## Examples
+
+### Basic chat interface
+
+```typescript
+import { useChat } from 'ai/react';
+
+export default function Chat() {
+  const { messages, sendMessage, status } = useChat();
+
+  return (
+    <div>
+      <div>
+        {messages.map((message) => (
+          <div key={message.id}>
+            <strong>{message.role}:</strong>
+            {message.content}
+          </div>
+        ))}
+      </div>
+
+      <button
+        onClick={() => sendMessage({ content: 'Hello!' })}
+        disabled={status === 'in_progress'}
+      >
+        {status === 'in_progress' ? 'Sending...' : 'Send'}
+      </button>
+    </div>
+  );
+}
+```
+
+### With input form
+
+```typescript
+import { useChat } from 'ai/react';
+import { useState } from 'react';
+
+export default function Chat() {
+  const { messages, sendMessage, status } = useChat();
+  const [input, setInput] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (input.trim()) {
+      sendMessage({ content: input });
+      setInput('');
+    }
+  };
+
+  return (
+    <div>
+      <div>
+        {messages.map((message) => (
+          <div key={message.id}>
+            <strong>{message.role}:</strong>
+            {message.content}
+          </div>
+        ))}
+      </div>
+
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Type a message..."
+        />
+        <button type="submit" disabled={status === 'in_progress'}>
+          Send
+        </button>
+      </form>
+    </div>
+  );
+}
+```
+
+### With tool calls
+
+```typescript
+import { useChat } from 'ai/react';
+
+export default function Chat() {
+  const { messages, sendMessage, addToolOutput, status } = useChat({
+    onToolCall: async (toolCall) => {
+      if (toolCall.toolName === 'getWeather') {
+        // Execute the tool
+        const weather = await fetch(
+          `/api/weather?location=${toolCall.input.location}`
+        ).then((res) => res.json());
+
+        // Add the result
+        addToolOutput({
+          toolCallId: toolCall.toolCallId,
+          output: weather,
+        });
+      }
+    },
+  });
+
+  return (
+    <div>
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.content}
+          {message.toolInvocations?.map((tool) => (
+            <div key={tool.toolCallId}>
+              Tool: {tool.toolName}
+              {tool.state === 'result' && (
+                <div>Result: {JSON.stringify(tool.result)}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### With custom API endpoint
+
+```typescript
+import { useChat } from 'ai/react';
+
+export default function Chat() {
+  const { messages, sendMessage } = useChat({
+    api: '/api/custom-chat',
+  });
+
+  return (
+    <div>
+      {messages.map((message) => (
+        <div key={message.id}>{message.content}</div>
+      ))}
+    </div>
+  );
+}
+```

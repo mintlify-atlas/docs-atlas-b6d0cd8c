@@ -1,0 +1,511 @@
+---
+title: Express with AI SDK
+description: Build AI-powered Express servers with streaming responses using the AI SDK
+---
+
+# Express with AI SDK
+
+Learn how to integrate the AI SDK into Express applications to create AI-powered HTTP endpoints.
+
+## Why Express?
+
+Express is a minimal and flexible Node.js framework ideal for:
+
+- Building AI API endpoints
+- Creating microservices
+- Adding AI to existing Express apps
+- Simple deployment options
+
+## Prerequisites
+
+- Node.js 18+
+- Basic knowledge of Express
+- Vercel AI Gateway API key
+
+## Quick Start
+
+Create a new project:
+
+```bash
+mkdir my-ai-server
+cd my-ai-server
+pnpm init
+```
+
+Install dependencies:
+
+```bash
+pnpm add express ai
+pnpm add -D @types/express tsx typescript
+```
+
+Configure TypeScript:
+
+```json filename="tsconfig.json"
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "outDir": "./dist",
+    "esModuleInterop": true,
+    "strict": true
+  }
+}
+```
+
+Set environment variables:
+
+```bash
+echo "AI_GATEWAY_API_KEY=your-api-key" > .env
+```
+
+## Basic Text Streaming
+
+Stream AI-generated text to clients:
+
+```ts filename="src/index.ts"
+import { streamText } from 'ai';
+import express, { Request, Response } from 'express';
+import 'dotenv/config';
+
+const app = express();
+app.use(express.json());
+
+app.post('/api/chat', async (req: Request, res: Response) => {
+  const { prompt } = req.body;
+
+  const result = streamText({
+    model: 'openai/gpt-4o',
+    prompt: prompt || 'Tell me a fun fact',
+  });
+
+  result.pipeUIMessageStreamToResponse(res);
+});
+
+app.listen(8080, () => {
+  console.log('Server running on http://localhost:8080');
+});
+```
+
+Run the server:
+
+```bash
+pnpx tsx src/index.ts
+```
+
+Test with curl:
+
+```bash
+curl -X POST http://localhost:8080/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Why is the sky blue?"}'
+```
+
+## UI Message Stream
+
+Stream messages in a format compatible with `useChat`:
+
+```ts filename="src/server.ts"
+import { streamText, convertToModelMessages, UIMessage } from 'ai';
+import express, { Request, Response } from 'express';
+import cors from 'cors';
+
+const app = express();
+app.use(express.json());
+app.use(cors());
+
+app.post('/api/chat', async (req: Request, res: Response) => {
+  const { messages }: { messages: UIMessage[] } = req.body;
+
+  const result = streamText({
+    model: 'openai/gpt-4o',
+    messages: await convertToModelMessages(messages),
+  });
+
+  result.pipeUIMessageStreamToResponse(res);
+});
+
+app.listen(8080, () => {
+  console.log('Chat server ready');
+});
+```
+
+## Text-Only Stream
+
+Stream plain text without message formatting:
+
+```ts filename="src/index.ts"
+import { streamText } from 'ai';
+import express, { Request, Response } from 'express';
+
+const app = express();
+app.use(express.json());
+
+app.post('/api/generate', async (req: Request, res: Response) => {
+  const { prompt } = req.body;
+
+  const result = streamText({
+    model: 'openai/gpt-4o',
+    prompt,
+  });
+
+  result.pipeTextStreamToResponse(res);
+});
+
+app.listen(8080);
+```
+
+## Custom Data Streaming
+
+Send custom data alongside AI responses:
+
+```ts filename="src/index.ts"
+import {
+  createUIMessageStream,
+  pipeUIMessageStreamToResponse,
+  streamText,
+} from 'ai';
+import express, { Request, Response } from 'express';
+
+const app = express();
+app.use(express.json());
+
+app.post('/api/chat', async (req: Request, res: Response) => {
+  pipeUIMessageStreamToResponse({
+    response: res,
+    stream: createUIMessageStream({
+      execute: async ({ writer }) => {
+        // Send custom metadata
+        writer.write({ type: 'start' });
+        writer.write({
+          type: 'data-custom',
+          data: {
+            timestamp: new Date().toISOString(),
+            model: 'gpt-4o',
+          },
+        });
+
+        // Stream AI response
+        const result = streamText({
+          model: 'openai/gpt-4o',
+          prompt: req.body.prompt,
+        });
+
+        writer.merge(result.toUIMessageStream({ sendStart: false }));
+      },
+    }),
+  });
+});
+
+app.listen(8080);
+```
+
+## Tool Calling
+
+Implement tools for extended functionality:
+
+```ts filename="src/index.ts"
+import {
+  streamText,
+  convertToModelMessages,
+  tool,
+  UIMessage,
+} from 'ai';
+import express, { Request, Response } from 'express';
+import { z } from 'zod';
+
+const app = express();
+app.use(express.json());
+
+app.post('/api/chat', async (req: Request, res: Response) => {
+  const { messages }: { messages: UIMessage[] } = req.body;
+
+  const result = streamText({
+    model: 'openai/gpt-4o',
+    messages: await convertToModelMessages(messages),
+    tools: {
+      getWeather: tool({
+        description: 'Get current weather for a location',
+        inputSchema: z.object({
+          city: z.string(),
+        }),
+        execute: async ({ city }) => {
+          // Simulate weather API call
+          const weatherData = {
+            city,
+            temperature: 72,
+            condition: 'Sunny',
+          };
+          return weatherData;
+        },
+      }),
+      calculateSum: tool({
+        description: 'Add two numbers',
+        inputSchema: z.object({
+          a: z.number(),
+          b: z.number(),
+        }),
+        execute: async ({ a, b }) => {
+          return { result: a + b };
+        },
+      }),
+    },
+  });
+
+  result.pipeUIMessageStreamToResponse(res);
+});
+
+app.listen(8080);
+```
+
+## Structured Output
+
+Generate structured JSON responses:
+
+```ts filename="src/index.ts"
+import { generateObject, Output } from 'ai';
+import express, { Request, Response } from 'express';
+import { z } from 'zod';
+
+const app = express();
+app.use(express.json());
+
+app.post('/api/extract', async (req: Request, res: Response) => {
+  const { text } = req.body;
+
+  const { object } = await generateObject({
+    model: 'openai/gpt-4o',
+    prompt: `Extract contact information from: ${text}`,
+    output: Output.object({
+      schema: z.object({
+        name: z.string(),
+        email: z.string().email(),
+        phone: z.string().optional(),
+      }),
+    }),
+  });
+
+  return res.json(object);
+});
+
+app.listen(8080);
+```
+
+## Error Handling
+
+Implement comprehensive error handling:
+
+```ts filename="src/index.ts"
+import { streamText } from 'ai';
+import express, { Request, Response, NextFunction } from 'express';
+
+const app = express();
+app.use(express.json());
+
+app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { prompt } = req.body;
+
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt is required' });
+    }
+
+    const result = streamText({
+      model: 'openai/gpt-4o',
+      prompt,
+    });
+
+    result.pipeUIMessageStreamToResponse(res);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Global error handler
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  console.error('Error:', err);
+  res.status(500).json({
+    error: 'Internal server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined,
+  });
+});
+
+app.listen(8080);
+```
+
+## Middleware
+
+### Rate Limiting
+
+```ts filename="src/middleware/ratelimit.ts"
+import rateLimit from 'express-rate-limit';
+
+export const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests, please try again later.',
+});
+```
+
+```ts filename="src/index.ts"
+import { limiter } from './middleware/ratelimit';
+
+app.use('/api/', limiter);
+```
+
+### Authentication
+
+```ts filename="src/middleware/auth.ts"
+import { Request, Response, NextFunction } from 'express';
+
+export function authenticate(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  const apiKey = req.headers['x-api-key'];
+
+  if (!apiKey || apiKey !== process.env.API_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  next();
+}
+```
+
+```ts filename="src/index.ts"
+import { authenticate } from './middleware/auth';
+
+app.use('/api/', authenticate);
+```
+
+## Production Setup
+
+### Project Structure
+
+```
+my-ai-server/
+├── src/
+│   ├── index.ts
+│   ├── routes/
+│   │   ├── chat.ts
+│   │   └── generate.ts
+│   ├── middleware/
+│   │   ├── auth.ts
+│   │   └── ratelimit.ts
+│   └── utils/
+│       └── ai.ts
+├── .env
+├── package.json
+└── tsconfig.json
+```
+
+### Example Routes Structure
+
+```ts filename="src/routes/chat.ts"
+import { Router } from 'express';
+import { streamText } from 'ai';
+
+const router = Router();
+
+router.post('/', async (req, res) => {
+  const result = streamText({
+    model: 'openai/gpt-4o',
+    prompt: req.body.prompt,
+  });
+
+  result.pipeUIMessageStreamToResponse(res);
+});
+
+export default router;
+```
+
+```ts filename="src/index.ts"
+import express from 'express';
+import chatRouter from './routes/chat';
+import generateRouter from './routes/generate';
+
+const app = express();
+
+app.use(express.json());
+app.use('/api/chat', chatRouter);
+app.use('/api/generate', generateRouter);
+
+app.listen(8080);
+```
+
+### Build and Run
+
+```json filename="package.json"
+{
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  }
+}
+```
+
+## Deployment
+
+### Docker
+
+```dockerfile filename="Dockerfile"
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+RUN npm run build
+
+EXPOSE 8080
+
+CMD ["npm", "start"]
+```
+
+### Railway/Render
+
+Both platforms support Express apps with minimal configuration:
+
+1. Connect your GitHub repository
+2. Set environment variables
+3. Deploy
+
+## Best Practices
+
+1. **Use Environment Variables**: Never hardcode API keys
+2. **Implement Rate Limiting**: Protect against abuse
+3. **Add CORS**: Allow frontend requests
+4. **Handle Errors**: Provide meaningful error messages
+5. **Log Requests**: Monitor usage and debug issues
+6. **Use TypeScript**: Catch errors at compile time
+7. **Validate Input**: Sanitize user input
+
+## Troubleshooting
+
+### Streaming Not Working
+
+Ensure you're not using compression middleware before streaming:
+
+```ts
+// Don't use compression on streaming routes
+app.use('/api/static', compression());
+app.post('/api/chat', async (req, res) => {
+  // Streaming route without compression
+});
+```
+
+## Example Repository
+
+View the complete example: [github.com/vercel/ai/examples/express](https://github.com/vercel/ai/tree/main/examples/express)
+
+## Resources
+
+- [Express Documentation](https://expressjs.com/)
+- [AI SDK Documentation](/docs)
+- [Streaming Documentation](/docs/ai-sdk-core/streaming)
+- [Tools Documentation](/docs/foundations/tools)

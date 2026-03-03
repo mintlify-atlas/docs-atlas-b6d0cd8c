@@ -1,0 +1,303 @@
+---
+title: useObject (experimental)
+description: API reference for the experimental_useObject hook
+---
+
+React hook for streaming structured object generation from AI language models.
+
+<Note>
+  This hook is experimental and may change in future versions.
+</Note>
+
+```typescript
+import { experimental_useObject as useObject } from 'ai/react';
+import { z } from 'zod';
+
+export default function ObjectGen() {
+  const { object, submit, isLoading } = useObject({
+    api: '/api/object',
+    schema: z.object({
+      name: z.string(),
+      age: z.number(),
+    }),
+  });
+
+  return (
+    <div>
+      <button onClick={() => submit({ prompt: 'Generate a person' })}>
+        Generate
+      </button>
+      {object && (
+        <div>
+          <div>Name: {object.name}</div>
+          <div>Age: {object.age}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+## Parameters
+
+<ParamField path="api" type="string" required>
+  The API endpoint. It should stream JSON that matches the schema as chunked text.
+</ParamField>
+
+<ParamField path="schema" type="FlexibleSchema" required>
+  A schema that defines the shape of the complete object.
+</ParamField>
+
+<ParamField path="id" type="string">
+  An unique identifier. If not provided, a random one will be generated.
+  When provided, the `useObject` hook with the same `id` will have shared states across components.
+</ParamField>
+
+<ParamField path="initialValue" type="DeepPartial<RESULT>">
+  An optional value for the initial object.
+</ParamField>
+
+<ParamField path="fetch" type="FetchFunction">
+  Custom fetch implementation. You can use it as a middleware to intercept requests,
+  or to provide a custom fetch implementation for e.g. testing.
+</ParamField>
+
+<ParamField path="onFinish" type="(event: { object: RESULT | undefined; error: Error | undefined }) => void">
+  Callback function to be called when the stream has finished.
+  The generated object (typed according to the schema) is passed as an argument.
+  Can be undefined if the final object does not match the schema.
+</ParamField>
+
+<ParamField path="onError" type="(error: Error) => void">
+  Callback function to be called when an error is encountered.
+</ParamField>
+
+<ParamField path="headers" type="Record<string, string> | Headers | (() => Record<string, string> | Headers | Promise<Record<string, string> | Headers>)">
+  Additional HTTP headers to be included in the request.
+  Can be a static object, a function that returns headers, or an async function for dynamic auth tokens.
+</ParamField>
+
+<ParamField path="credentials" type="RequestCredentials">
+  The credentials mode to be used for the fetch request.
+  Possible values are: `'omit'`, `'same-origin'`, `'include'`.
+  Defaults to `'same-origin'`.
+</ParamField>
+
+## Returns
+
+<ResponseField name="submit" type="(input: INPUT) => void">
+  Calls the API with the provided input as JSON body.
+</ResponseField>
+
+<ResponseField name="object" type="DeepPartial<RESULT> | undefined">
+  The current value for the generated object. Updated as the API streams JSON chunks.
+</ResponseField>
+
+<ResponseField name="error" type="Error | undefined">
+  The error object of the API request if any.
+</ResponseField>
+
+<ResponseField name="isLoading" type="boolean">
+  Flag that indicates whether an API request is in progress.
+</ResponseField>
+
+<ResponseField name="stop" type="() => void">
+  Abort the current request immediately, keep the current partial object if any.
+</ResponseField>
+
+<ResponseField name="clear" type="() => void">
+  Clear the object state.
+</ResponseField>
+
+## Examples
+
+### Basic object generation
+
+```typescript
+import { experimental_useObject as useObject } from 'ai/react';
+import { z } from 'zod';
+
+const schema = z.object({
+  name: z.string(),
+  age: z.number(),
+  occupation: z.string(),
+});
+
+export default function ObjectGen() {
+  const { object, submit, isLoading } = useObject({
+    api: '/api/object',
+    schema,
+  });
+
+  return (
+    <div>
+      <button
+        onClick={() => submit({ prompt: 'Generate a person profile' })}
+        disabled={isLoading}
+      >
+        Generate
+      </button>
+      {object && (
+        <div>
+          <div>Name: {object.name}</div>
+          <div>Age: {object.age}</div>
+          <div>Occupation: {object.occupation}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### With loading state
+
+```typescript
+import { experimental_useObject as useObject } from 'ai/react';
+import { z } from 'zod';
+
+export default function ObjectGen() {
+  const { object, submit, isLoading } = useObject({
+    api: '/api/object',
+    schema: z.object({
+      recipe: z.object({
+        name: z.string(),
+        ingredients: z.array(z.string()),
+        steps: z.array(z.string()),
+      }),
+    }),
+  });
+
+  return (
+    <div>
+      <button onClick={() => submit({ prompt: 'Generate a recipe' })}>
+        Generate Recipe
+      </button>
+      
+      {isLoading && <div>Generating...</div>}
+      
+      {object?.recipe && (
+        <div>
+          <h2>{object.recipe.name || '...'}</h2>
+          <h3>Ingredients</h3>
+          <ul>
+            {object.recipe.ingredients?.map((ingredient, i) => (
+              <li key={i}>{ingredient}</li>
+            ))}
+          </ul>
+          <h3>Steps</h3>
+          <ol>
+            {object.recipe.steps?.map((step, i) => (
+              <li key={i}>{step}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### With error handling
+
+```typescript
+import { experimental_useObject as useObject } from 'ai/react';
+import { z } from 'zod';
+import { useState } from 'react';
+
+export default function ObjectGen() {
+  const [errorMessage, setErrorMessage] = useState<string>();
+
+  const { object, submit, isLoading, error } = useObject({
+    api: '/api/object',
+    schema: z.object({
+      title: z.string(),
+      content: z.string(),
+    }),
+    onError: (error) => {
+      setErrorMessage(error.message);
+    },
+  });
+
+  return (
+    <div>
+      <button onClick={() => submit({ topic: 'AI' })}>
+        Generate Article
+      </button>
+      
+      {errorMessage && (
+        <div style={{ color: 'red' }}>
+          Error: {errorMessage}
+        </div>
+      )}
+      
+      {object && (
+        <div>
+          <h1>{object.title}</h1>
+          <p>{object.content}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### With stop and clear
+
+```typescript
+import { experimental_useObject as useObject } from 'ai/react';
+import { z } from 'zod';
+
+export default function ObjectGen() {
+  const { object, submit, stop, clear, isLoading } = useObject({
+    api: '/api/object',
+    schema: z.object({
+      story: z.string(),
+    }),
+  });
+
+  return (
+    <div>
+      <button onClick={() => submit({ prompt: 'Write a long story' })}>
+        Start
+      </button>
+      <button onClick={stop} disabled={!isLoading}>
+        Stop
+      </button>
+      <button onClick={clear}>
+        Clear
+      </button>
+      
+      {object && <div>{object.story}</div>}
+    </div>
+  );
+}
+```
+
+### Dynamic headers (e.g., auth tokens)
+
+```typescript
+import { experimental_useObject as useObject } from 'ai/react';
+import { z } from 'zod';
+
+export default function ObjectGen() {
+  const { object, submit } = useObject({
+    api: '/api/object',
+    schema: z.object({ result: z.string() }),
+    headers: async () => {
+      const token = await getAuthToken();
+      return {
+        Authorization: `Bearer ${token}`,
+      };
+    },
+  });
+
+  return (
+    <div>
+      <button onClick={() => submit({ prompt: 'Generate' })}>
+        Generate
+      </button>
+      {object && <div>{object.result}</div>}
+    </div>
+  );
+}
+```

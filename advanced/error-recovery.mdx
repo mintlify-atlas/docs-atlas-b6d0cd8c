@@ -1,0 +1,560 @@
+---
+title: Error Recovery
+description: Learn strategies for handling and recovering from errors in AI SDK applications
+---
+
+# Error Recovery
+
+Robust error handling is critical for production AI applications. The AI SDK provides multiple patterns for error detection, handling, and recovery.
+
+## Error Types
+
+### AI SDK Error Classes
+
+The AI SDK provides specific error classes:
+
+```ts
+import {
+  APICallError,
+  InvalidArgumentError,
+  InvalidToolInputError,
+  NoSuchToolError,
+  NoObjectGeneratedError,
+  TypeValidationError,
+} from 'ai';
+
+try {
+  const result = await generateText({
+    model: openai('gpt-4'),
+    prompt: 'Hello',
+  });
+} catch (error) {
+  if (APICallError.isInstance(error)) {
+    console.error('API call failed:', error.message);
+    console.error('Status code:', error.statusCode);
+  } else if (InvalidArgumentError.isInstance(error)) {
+    console.error('Invalid argument:', error.message);
+  }
+}
+```
+
+### Common Error Scenarios
+
+```ts
+import {
+  APICallError,
+  InvalidToolInputError,
+  NoObjectGeneratedError,
+} from 'ai';
+
+// API rate limiting
+if (APICallError.isInstance(error) && error.statusCode === 429) {
+  console.log('Rate limited, retrying after delay...');
+  await delay(5000);
+}
+
+// Invalid tool parameters
+if (InvalidToolInputError.isInstance(error)) {
+  console.error('Tool received invalid input:', error.toolInput);
+  console.error('For tool:', error.toolName);
+}
+
+// Object generation failed
+if (NoObjectGeneratedError.isInstance(error)) {
+  console.error('Failed to generate structured output');
+  console.error('Response:', error.text);
+}
+```
+
+## Retry Strategies
+
+### Built-in Retry
+
+Use the `maxRetries` option:
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-4'),
+  prompt: 'Hello',
+  maxRetries: 3, // Retry up to 3 times on failure
+});
+```
+
+### Custom Retry Logic
+
+Implement exponential backoff:
+
+```ts
+async function generateWithRetry<T>(
+  fn: () => Promise<T>,
+  options: {
+    maxRetries?: number;
+    baseDelay?: number;
+    maxDelay?: number;
+  } = {},
+): Promise<T> {
+  const {
+    maxRetries = 3,
+    baseDelay = 1000,
+    maxDelay = 30000,
+  } = options;
+
+  let lastError: Error;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+
+      if (attempt === maxRetries) {
+        throw error;
+      }
+
+      // Calculate exponential backoff with jitter
+      const delay = Math.min(
+        baseDelay * Math.pow(2, attempt) + Math.random() * 1000,
+        maxDelay,
+      );
+
+      console.log(`Attempt ${attempt + 1} failed, retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError!;
+}
+
+// Usage
+const result = await generateWithRetry(() =>
+  generateText({
+    model: openai('gpt-4'),
+    prompt: 'Hello',
+  }),
+);
+```
+
+### Selective Retry
+
+Retry only on specific errors:
+
+```ts
+import { APICallError } from 'ai';
+
+const RETRYABLE_STATUS_CODES = [408, 429, 500, 502, 503, 504];
+
+async function generateWithSelectiveRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+): Promise<T> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (
+        APICallError.isInstance(error) &&
+        RETRYABLE_STATUS_CODES.includes(error.statusCode ?? 0)
+      ) {
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+          continue;
+        }
+      }
+      throw error;
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
+```
+
+## Fallback Models
+
+Fall back to alternative models:
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
+
+async function generateWithFallback(prompt: string) {
+  const models = [
+    { name: 'gpt-4', model: openai('gpt-4') },
+    { name: 'gpt-3.5-turbo', model: openai('gpt-3.5-turbo') },
+    { name: 'claude-3-5-sonnet', model: anthropic('claude-3-5-sonnet-20241022') },
+  ];
+
+  let lastError: Error | null = null;
+
+  for (const { name, model } of models) {
+    try {
+      console.log(`Trying ${name}...`);
+      return await generateText({ model, prompt });
+    } catch (error) {
+      console.error(`${name} failed:`, error);
+      lastError = error as Error;
+      continue;
+    }
+  }
+
+  throw new Error(
+    `All models failed. Last error: ${lastError?.message}`,
+  );
+}
+```
+
+## Streaming Error Recovery
+
+### Handling Stream Errors
+
+```ts
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = streamText({
+  model: openai('gpt-4'),
+  prompt: 'Write a story',
+});
+
+try {
+  for await (const chunk of result.textStream) {
+    process.stdout.write(chunk);
+  }
+} catch (error) {
+  console.error('Stream failed:', error);
+  // Implement recovery logic
+}
+```
+
+### Partial Results on Error
+
+```ts
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = streamText({
+  model: openai('gpt-4'),
+  prompt: 'Write a story',
+});
+
+let partialText = '';
+
+try {
+  for await (const chunk of result.textStream) {
+    partialText += chunk;
+    process.stdout.write(chunk);
+  }
+} catch (error) {
+  console.error('Stream interrupted');
+  console.log('Partial result:', partialText);
+  // Save or use partial result
+}
+```
+
+### Resumable Streams
+
+```ts
+async function resumableGenerate({
+  prompt,
+  onProgress,
+}: {
+  prompt: string;
+  onProgress: (text: string) => void;
+}) {
+  let accumulated = '';
+  let attempts = 0;
+  const maxAttempts = 3;
+
+  while (attempts < maxAttempts) {
+    try {
+      const result = streamText({
+        model: openai('gpt-4'),
+        prompt: accumulated
+          ? `Continue from: ${accumulated}\n\nOriginal prompt: ${prompt}`
+          : prompt,
+      });
+
+      for await (const chunk of result.textStream) {
+        accumulated += chunk;
+        onProgress(accumulated);
+      }
+
+      return accumulated;
+    } catch (error) {
+      attempts++;
+      console.error(`Attempt ${attempts} failed:`, error);
+
+      if (attempts >= maxAttempts) {
+        throw new Error(`Failed after ${maxAttempts} attempts`);
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+}
+```
+
+## Tool Call Error Handling
+
+### Validating Tool Inputs
+
+```ts
+import { generateText, tool } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const result = await generateText({
+  model: openai('gpt-4'),
+  prompt: 'Get weather for London',
+  tools: {
+    getWeather: tool({
+      description: 'Get weather for a location',
+      inputSchema: z.object({
+        location: z.string().min(1, 'Location is required'),
+        units: z.enum(['celsius', 'fahrenheit']).default('celsius'),
+      }),
+      execute: async ({ location, units }) => {
+        try {
+          const weather = await fetchWeather(location, units);
+          return weather;
+        } catch (error) {
+          return {
+            error: true,
+            message: `Failed to fetch weather: ${error.message}`,
+          };
+        }
+      },
+    }),
+  },
+});
+```
+
+### Tool Execution Errors
+
+```ts
+import { generateText, tool } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const result = await generateText({
+  model: openai('gpt-4'),
+  tools: {
+    riskyOperation: tool({
+      inputSchema: z.object({ action: z.string() }),
+      execute: async ({ action }) => {
+        try {
+          return await performAction(action);
+        } catch (error) {
+          // Return error as tool result
+          return {
+            success: false,
+            error: error.message,
+            suggestedAction: 'Try again with different parameters',
+          };
+        }
+      },
+    }),
+  },
+});
+```
+
+## RSC Error Recovery
+
+### Streamable UI Errors
+
+```tsx
+import { createStreamableUI } from '@ai-sdk/rsc';
+
+export async function generateComponent() {
+  const stream = createStreamableUI(<div>Loading...</div>);
+
+  (async () => {
+    try {
+      const data = await fetchData();
+      stream.update(<Success data={data} />);
+      stream.done();
+    } catch (error) {
+      stream.error(error);
+    }
+  })();
+
+  return stream.value;
+}
+```
+
+### Client-Side Error Boundaries
+
+```tsx
+'use client';
+
+import { ErrorBoundary } from 'react-error-boundary';
+
+function ErrorFallback({ error, resetErrorBoundary }) {
+  return (
+    <div role="alert">
+      <h2>Something went wrong</h2>
+      <pre>{error.message}</pre>
+      <button onClick={resetErrorBoundary}>Try again</button>
+    </div>
+  );
+}
+
+export function SafeAIComponent({ children }) {
+  return (
+    <ErrorBoundary
+      FallbackComponent={ErrorFallback}
+      onReset={() => {
+        // Reset component state
+      }}
+    >
+      {children}
+    </ErrorBoundary>
+  );
+}
+```
+
+### Graceful Degradation
+
+```tsx
+import { streamUI } from '@ai-sdk/rsc';
+import { openai } from '@ai-sdk/openai';
+
+export async function generateResponse(prompt: string) {
+  try {
+    const result = await streamUI({
+      model: openai('gpt-4'),
+      prompt,
+      text: ({ content }) => <div>{content}</div>,
+    });
+    return result.value;
+  } catch (error) {
+    console.error('AI generation failed:', error);
+    // Return fallback UI
+    return (
+      <div>
+        <p>Unable to generate AI response at this time.</p>
+        <p>Please try again later.</p>
+      </div>
+    );
+  }
+}
+```
+
+## Timeout Handling
+
+### AbortSignal
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const controller = new AbortController();
+const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+try {
+  const result = await generateText({
+    model: openai('gpt-4'),
+    prompt: 'Write a long story',
+    abortSignal: controller.signal,
+  });
+  clearTimeout(timeoutId);
+  return result;
+} catch (error) {
+  if (error.name === 'AbortError') {
+    console.error('Request timed out');
+  }
+  throw error;
+}
+```
+
+### Timeout Wrapper
+
+```ts
+async function withTimeout<T>(
+  fn: (signal: AbortSignal) => Promise<T>,
+  timeout: number,
+): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    return await fn(controller.signal);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// Usage
+const result = await withTimeout(
+  signal =>
+    generateText({
+      model: openai('gpt-4'),
+      prompt: 'Hello',
+      abortSignal: signal,
+    }),
+  30000,
+);
+```
+
+## Logging and Monitoring
+
+### Error Tracking
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+async function generateWithTracking(prompt: string) {
+  const startTime = Date.now();
+  const requestId = crypto.randomUUID();
+
+  try {
+    const result = await generateText({
+      model: openai('gpt-4'),
+      prompt,
+    });
+
+    // Log success
+    console.log({
+      requestId,
+      duration: Date.now() - startTime,
+      tokens: result.usage,
+      status: 'success',
+    });
+
+    return result;
+  } catch (error) {
+    // Log error
+    console.error({
+      requestId,
+      duration: Date.now() - startTime,
+      error: error.message,
+      status: 'error',
+    });
+
+    // Send to error tracking service
+    // await trackError({ requestId, error });
+
+    throw error;
+  }
+}
+```
+
+## Best Practices
+
+1. **Use specific error checks**: Use `ErrorClass.isInstance()` instead of `instanceof`
+2. **Implement retry logic**: Add exponential backoff for transient failures
+3. **Set timeouts**: Prevent indefinite hangs with `AbortSignal`
+4. **Validate inputs**: Catch errors early with schema validation
+5. **Provide fallbacks**: Have alternative models or cached responses
+6. **Log errors**: Track failures for debugging and monitoring
+7. **Handle partial results**: Save progress in streaming scenarios
+8. **Use error boundaries**: Isolate UI errors in React applications
+
+## Next Steps
+
+- Review [common issues](/docs/troubleshooting/common-issues)
+- Learn about [debugging techniques](/docs/troubleshooting/debugging)
+- Explore [middleware implementation](/docs/advanced/middleware-implementation)

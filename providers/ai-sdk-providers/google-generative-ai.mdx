@@ -1,0 +1,241 @@
+---
+title: Google Generative AI Provider
+description: Learn how to use Google's Gemini models for text generation, multimodal AI, and embeddings with the AI SDK.
+---
+
+# Google Generative AI Provider
+
+The Google Generative AI provider enables you to use Google's Gemini models for text generation, vision, code execution, and more.
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @ai-sdk/google
+```
+
+```bash pnpm
+pnpm add @ai-sdk/google
+```
+
+```bash yarn
+yarn add @ai-sdk/google
+```
+
+```bash bun
+bun add @ai-sdk/google
+```
+</CodeGroup>
+
+## Setup
+
+Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey) and set it as an environment variable:
+
+```bash
+GOOGLE_GENERATIVE_AI_API_KEY=your-api-key
+```
+
+## Usage
+
+### Basic Text Generation
+
+```typescript
+import { google } from '@ai-sdk/google';
+import { generateText } from 'ai';
+
+const { text } = await generateText({
+  model: google('gemini-2.0-flash'),
+  prompt: 'Explain machine learning in simple terms.',
+});
+```
+
+### Streaming Responses
+
+```typescript
+import { google } from '@ai-sdk/google';
+import { streamText } from 'ai';
+
+const result = streamText({
+  model: google('gemini-2.0-flash'),
+  prompt: 'Write a poem about nature.',
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### Structured Output
+
+```typescript
+import { google } from '@ai-sdk/google';
+import { generateObject } from 'ai';
+import { z } from 'zod';
+
+const { object } = await generateObject({
+  model: google('gemini-2.0-flash'),
+  schema: z.object({
+    title: z.string(),
+    summary: z.string(),
+    tags: z.array(z.string()),
+  }),
+  prompt: 'Generate metadata for an article about renewable energy.',
+});
+```
+
+## Configuration
+
+### Custom Provider Instance
+
+```typescript
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+
+const google = createGoogleGenerativeAI({
+  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+  baseURL: 'https://generativelanguage.googleapis.com/v1beta',
+});
+```
+
+### Provider Options
+
+- **apiKey**: Your Google AI API key (defaults to `GOOGLE_GENERATIVE_AI_API_KEY` env var)
+- **baseURL**: Custom API endpoint URL
+- **headers**: Custom headers for requests
+
+## Available Models
+
+### Gemini 2.0 Family
+
+- `gemini-2.0-flash` - Fast and efficient
+- `gemini-2.0-flash-exp` - Experimental features
+
+### Gemini 1.5 Family
+
+- `gemini-1.5-pro` - Most capable model
+- `gemini-1.5-flash` - Fast and cost-effective
+
+## Advanced Features
+
+### Vision
+
+```typescript
+import { google } from '@ai-sdk/google';
+import { generateText } from 'ai';
+import fs from 'fs';
+
+const result = await generateText({
+  model: google('gemini-2.0-flash'),
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'What is shown in this image?' },
+        { type: 'image', image: fs.readFileSync('./image.jpg') },
+      ],
+    },
+  ],
+});
+```
+
+### Code Execution
+
+```typescript
+import { google } from '@ai-sdk/google';
+import { generateText } from 'ai';
+
+const { text } = await generateText({
+  model: google('gemini-2.0-flash'),
+  tools: {
+    code_execution: google.tools.codeExecution({}),
+  },
+  prompt: 'Calculate the 20th Fibonacci number using Python.',
+});
+```
+
+### Google Search Grounding
+
+```typescript
+import { google } from '@ai-sdk/google';
+import { generateText } from 'ai';
+
+const { text, sources } = await generateText({
+  model: google('gemini-2.0-flash'),
+  tools: {
+    google_search: google.tools.googleSearch({}),
+  },
+  prompt: 'What are the latest AI developments?',
+});
+
+console.log('Answer:', text);
+console.log('Sources:', sources);
+```
+
+### PDF Support
+
+```typescript
+import { google } from '@ai-sdk/google';
+import { generateText } from 'ai';
+import fs from 'fs';
+
+const result = await generateText({
+  model: google('gemini-2.0-flash'),
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Summarize this document.' },
+        {
+          type: 'file',
+          data: fs.readFileSync('./document.pdf'),
+          mediaType: 'application/pdf',
+        },
+      ],
+    },
+  ],
+});
+```
+
+### Embeddings
+
+```typescript
+import { google } from '@ai-sdk/google';
+import { embed } from 'ai';
+
+const { embedding } = await embed({
+  model: google.embedding('text-embedding-004'),
+  value: 'Hello, world!',
+});
+```
+
+**Available Models:**
+- `text-embedding-004` (768 dimensions)
+
+### Image Generation
+
+```typescript
+import { google } from '@ai-sdk/google';
+import { generateImage } from 'ai';
+
+const { image } = await generateImage({
+  model: google.image('imagen-3.0-generate-001'),
+  prompt: 'A futuristic city at night',
+  aspectRatio: '16:9',
+});
+```
+
+**Available Models:**
+- `imagen-3.0-generate-001` - Latest Imagen model
+
+## Model Capabilities
+
+| Model | Vision | Tools | Structured Output |
+|-------|--------|-------|-------------------|
+| gemini-2.0-flash | ✓ | ✓ | ✓ |
+| gemini-1.5-pro | ✓ | ✓ | ✓ |
+| gemini-1.5-flash | ✓ | ✓ | ✓ |
+
+## Resources
+
+- [Google AI Documentation](https://ai.google.dev/)
+- [AI SDK Documentation](/docs)
+- [Gemini API Reference](https://ai.google.dev/api)

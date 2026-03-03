@@ -1,0 +1,312 @@
+---
+title: streamUI
+description: API reference for the streamUI function
+---
+
+Creates a streamable UI from LLMs in React Server Components.
+
+```typescript
+import { streamUI } from 'ai/rsc';
+import { openai } from '@ai-sdk/openai';
+
+export async function generateUI() {
+  const result = await streamUI({
+    model: openai('gpt-4-turbo'),
+    prompt: 'Get the weather for San Francisco',
+    text: ({ content }) => <div>{content}</div>,
+    tools: {
+      getWeather: {
+        description: 'Get the weather for a location',
+        inputSchema: z.object({
+          location: z.string(),
+        }),
+        generate: async function* ({ location }) {
+          yield <div>Loading weather for {location}...</div>;
+          const weather = await fetchWeather(location);
+          return <div>Weather in {location}: {weather.temp}°F</div>;
+        },
+      },
+    },
+  });
+
+  return result.value;
+}
+```
+
+## Parameters
+
+<ParamField path="model" type="LanguageModelV3" required>
+  The language model to use.
+</ParamField>
+
+<ParamField path="prompt" type="string">
+  A simple text prompt. You can either use `prompt` or `messages` but not both.
+</ParamField>
+
+<ParamField path="messages" type="Array<CoreMessage>">
+  A list of messages. You can either use `prompt` or `messages` but not both.
+</ParamField>
+
+<ParamField path="system" type="string">
+  A system message that will be part of the prompt.
+</ParamField>
+
+<ParamField path="tools" type="Record<string, RenderTool>">
+  The tools that the model can call. The model needs to support calling tools.
+</ParamField>
+
+<ParamField path="toolChoice" type="ToolChoice">
+  The tool choice strategy. Default: `'auto'`.
+</ParamField>
+
+<ParamField path="text" type="RenderText">
+  Renderer for text content. Receives an object with `content`, `delta`, and `done` properties.
+</ParamField>
+
+<ParamField path="initial" type="ReactNode">
+  Initial React node to display before any content is generated.
+</ParamField>
+
+<ParamField path="maxOutputTokens" type="number">
+  Maximum number of tokens to generate.
+</ParamField>
+
+<ParamField path="temperature" type="number">
+  Temperature setting. The value is passed through to the provider.
+</ParamField>
+
+<ParamField path="topP" type="number">
+  Nucleus sampling. The value is passed through to the provider.
+</ParamField>
+
+<ParamField path="topK" type="number">
+  Only sample from the top K options for each subsequent token.
+</ParamField>
+
+<ParamField path="presencePenalty" type="number">
+  Presence penalty setting.
+</ParamField>
+
+<ParamField path="frequencyPenalty" type="number">
+  Frequency penalty setting.
+</ParamField>
+
+<ParamField path="seed" type="number">
+  The seed (integer) to use for random sampling.
+</ParamField>
+
+<ParamField path="maxRetries" type="number" default="2">
+  Maximum number of retries. Set to 0 to disable retries.
+</ParamField>
+
+<ParamField path="abortSignal" type="AbortSignal">
+  An optional abort signal that can be used to cancel the call.
+</ParamField>
+
+<ParamField path="headers" type="Record<string, string>">
+  Additional HTTP headers to be sent with the request.
+</ParamField>
+
+<ParamField path="providerOptions" type="ProviderOptions">
+  Additional provider-specific options.
+</ParamField>
+
+<ParamField path="onFinish" type="(event: OnFinishEvent) => void">
+  Callback that is called when the LLM response and the final object validation are finished.
+</ParamField>
+
+## Tool Definition
+
+### RenderTool
+
+<ParamField path="description" type="string">
+  Description of what the tool does.
+</ParamField>
+
+<ParamField path="inputSchema" type="ZodSchema | Schema">
+  The schema that defines the input shape for the tool.
+</ParamField>
+
+<ParamField path="generate" type="Renderer">
+  The render function for the tool. Can be:
+  - A function that returns a React node
+  - A generator function that yields intermediate React nodes
+  - An async generator function that yields intermediate React nodes
+</ParamField>
+
+### RenderText
+
+A function that renders text content:
+
+```typescript
+type RenderText = (args: {
+  content: string;  // The full text content from the model so far
+  delta: string;    // The new appended text since the last call
+  done: boolean;    // Whether the model is done generating
+}) => ReactNode | Generator<ReactNode> | AsyncGenerator<ReactNode>;
+```
+
+## Returns
+
+<ResponseField name="value" type="ReactNode">
+  The React node value that can be returned from a Server Action and rendered on the client.
+</ResponseField>
+
+<ResponseField name="stream" type="ReadableStream">
+  The underlying stream from the language model.
+</ResponseField>
+
+<ResponseField name="response" type="LanguageModelV3StreamResult['response']">
+  Response metadata from the language model.
+</ResponseField>
+
+<ResponseField name="request" type="LanguageModelV3StreamResult['request']">
+  Request metadata.
+</ResponseField>
+
+## Examples
+
+### Basic text rendering
+
+```typescript
+import { streamUI } from 'ai/rsc';
+import { openai } from '@ai-sdk/openai';
+
+export async function generateGreeting() {
+  const result = await streamUI({
+    model: openai('gpt-4-turbo'),
+    prompt: 'Say hello',
+    text: ({ content, done }) => (
+      <div>
+        {content}
+        {!done && <span className="cursor">▋</span>}
+      </div>
+    ),
+  });
+
+  return result.value;
+}
+```
+
+### With tools
+
+```typescript
+import { streamUI } from 'ai/rsc';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+export async function generateWeather() {
+  const result = await streamUI({
+    model: openai('gpt-4-turbo'),
+    prompt: 'What is the weather in San Francisco?',
+    text: ({ content }) => <div>{content}</div>,
+    tools: {
+      getWeather: {
+        description: 'Get the weather for a location',
+        inputSchema: z.object({
+          location: z.string(),
+        }),
+        generate: async ({ location }) => {
+          const weather = await fetchWeather(location);
+          return (
+            <div className="weather-card">
+              <h3>{location}</h3>
+              <p>Temperature: {weather.temp}°F</p>
+              <p>Condition: {weather.condition}</p>
+            </div>
+          );
+        },
+      },
+    },
+  });
+
+  return result.value;
+}
+```
+
+### Streaming tool output
+
+```typescript
+import { streamUI } from 'ai/rsc';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+export async function generateStock() {
+  const result = await streamUI({
+    model: openai('gpt-4-turbo'),
+    prompt: 'Show me the stock price for AAPL',
+    text: ({ content }) => <div>{content}</div>,
+    tools: {
+      getStockPrice: {
+        description: 'Get the stock price for a symbol',
+        inputSchema: z.object({
+          symbol: z.string(),
+        }),
+        generate: async function* ({ symbol }) {
+          // Show loading state
+          yield <div>Loading {symbol}...</div>;
+          
+          // Fetch data
+          const price = await fetchStockPrice(symbol);
+          
+          // Show intermediate state
+          yield <div>{symbol}: ${price.current}</div>;
+          
+          // Fetch additional data
+          const history = await fetchStockHistory(symbol);
+          
+          // Show final state
+          return (
+            <div className="stock-card">
+              <h3>{symbol}</h3>
+              <p>Current: ${price.current}</p>
+              <p>Change: {price.change}%</p>
+              <div className="chart">
+                {/* Render history chart */}
+              </div>
+            </div>
+          );
+        },
+      },
+    },
+  });
+
+  return result.value;
+}
+```
+
+### Multiple tools
+
+```typescript
+import { streamUI } from 'ai/rsc';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+export async function generateDashboard() {
+  const result = await streamUI({
+    model: openai('gpt-4-turbo'),
+    prompt: 'Show me the weather and stock price',
+    text: ({ content }) => <div>{content}</div>,
+    tools: {
+      getWeather: {
+        description: 'Get weather information',
+        inputSchema: z.object({ location: z.string() }),
+        generate: async ({ location }) => {
+          const weather = await fetchWeather(location);
+          return <WeatherCard {...weather} />;
+        },
+      },
+      getStockPrice: {
+        description: 'Get stock price',
+        inputSchema: z.object({ symbol: z.string() }),
+        generate: async ({ symbol }) => {
+          const stock = await fetchStock(symbol);
+          return <StockCard {...stock} />;
+        },
+      },
+    },
+  });
+
+  return result.value;
+}
+```

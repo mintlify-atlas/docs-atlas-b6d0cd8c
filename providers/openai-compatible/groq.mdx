@@ -1,0 +1,199 @@
+---
+title: Groq
+description: Learn how to use Groq with the OpenAI Compatible provider in the AI SDK.
+---
+
+# Groq Provider
+
+[Groq](https://groq.com/) provides ultra-fast inference for open-source language models using their custom LPU (Language Processing Unit) architecture. Groq offers an OpenAI-compatible API for seamless integration.
+
+## Setup
+
+The Groq provider is available as a dedicated package `@ai-sdk/groq`. You can install it with:
+
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
+  <Tab>
+    <Snippet text="pnpm add @ai-sdk/groq" dark />
+  </Tab>
+  <Tab>
+    <Snippet text="npm install @ai-sdk/groq" dark />
+  </Tab>
+  <Tab>
+    <Snippet text="yarn add @ai-sdk/groq" dark />
+  </Tab>
+  <Tab>
+    <Snippet text="bun add @ai-sdk/groq" dark />
+  </Tab>
+</Tabs>
+
+## Provider Instance
+
+You can import the default provider instance `groq` from `@ai-sdk/groq`:
+
+```ts
+import { groq } from '@ai-sdk/groq';
+```
+
+If you need a customized setup, you can import `createGroq` and create a provider instance with your settings:
+
+```ts
+import { createGroq } from '@ai-sdk/groq';
+
+const groq = createGroq({
+  apiKey: process.env.GROQ_API_KEY ?? '',
+});
+```
+
+You can use the following optional settings to customize the Groq provider instance:
+
+- **baseURL** _string_
+
+  Use a different URL prefix for API calls. The default prefix is `https://api.groq.com/openai/v1`.
+
+- **apiKey** _string_
+
+  API key that is being sent using the `Authorization` header. It defaults to the `GROQ_API_KEY` environment variable.
+
+- **headers** _Record&lt;string,string&gt;_
+
+  Custom headers to include in the requests.
+
+- **fetch** _(input: RequestInfo, init?: RequestInit) => Promise&lt;Response&gt;_
+
+  Custom [fetch](https://developer.mozilla.org/en-US/docs/Web/API/fetch) implementation.
+
+## Language Models
+
+You can create Groq models using a provider instance:
+
+```ts
+import { groq } from '@ai-sdk/groq';
+import { generateText } from 'ai';
+
+const { text } = await generateText({
+  model: groq('gemma2-9b-it'),
+  prompt: 'Invent a new holiday and describe its traditions.',
+});
+```
+
+Groq language models can also be used in the `streamText` function (see [AI SDK Core](/docs/ai-sdk-core)).
+
+### Example: Streaming Text
+
+```ts
+import { groq } from '@ai-sdk/groq';
+import { streamText } from 'ai';
+
+const result = streamText({
+  model: groq('llama-3.3-70b-versatile'),
+  prompt: 'Write a story about a magical library.',
+});
+
+for await (const textPart of result.textStream) {
+  process.stdout.write(textPart);
+}
+```
+
+### Example: Tool Calling
+
+```ts
+import { groq } from '@ai-sdk/groq';
+import { generateText, tool } from 'ai';
+import { z } from 'zod';
+
+const result = await generateText({
+  model: groq('llama-3.3-70b-versatile'),
+  tools: {
+    weather: tool({
+      description: 'Get the weather in a location',
+      parameters: z.object({
+        location: z.string().describe('The location to get the weather for'),
+      }),
+      execute: async ({ location }) => ({
+        location,
+        temperature: 72 + Math.floor(Math.random() * 21) - 10,
+      }),
+    }),
+  },
+  prompt: 'What is the weather in San Francisco?',
+});
+
+console.log(result.text);
+```
+
+## Browser Search Tool
+
+Groq provides a unique browser search tool that offers interactive web browsing capabilities. Unlike traditional web search, browser search navigates websites interactively, providing more detailed and comprehensive results.
+
+### Supported Models
+
+Browser search is only available for these models:
+
+- `openai/gpt-oss-20b`
+- `openai/gpt-oss-120b`
+
+<Warning>
+Using browser search with other models will generate a warning and the tool will be ignored.
+</Warning>
+
+### Basic Usage
+
+```ts
+import { groq } from '@ai-sdk/groq';
+import { generateText } from 'ai';
+
+const result = await generateText({
+  model: groq('openai/gpt-oss-120b'),
+  prompt: 'What are the latest developments in AI? Please search for recent news.',
+  tools: {
+    browser_search: groq.tools.browserSearch({}),
+  },
+  toolChoice: 'required',
+});
+
+console.log(result.text);
+```
+
+### Key Features
+
+- **Interactive Browsing**: Navigates websites like a human user
+- **Comprehensive Results**: More detailed than traditional search snippets
+- **Server-side Execution**: Runs on Groq's infrastructure, no setup required
+- **Powered by Exa**: Uses Exa search engine for optimal results
+- **Currently Free**: Available at no additional charge during beta
+
+## Transcription Models
+
+Groq provides transcription capabilities through the Whisper model:
+
+```ts
+import { groq } from '@ai-sdk/groq';
+import { transcribe } from 'ai';
+import fs from 'fs';
+
+const audioFile = fs.readFileSync('./audio.mp3');
+
+const { text } = await transcribe({
+  model: groq.transcription('whisper-large-v3-turbo'),
+  audio: audioFile,
+});
+
+console.log(text);
+```
+
+## Model Capabilities
+
+| Model                       | Image Input         | Object Generation   | Tool Usage          | Tool Streaming      |
+| --------------------------- | ------------------- | ------------------- | ------------------- | ------------------- |
+| `llama-3.3-70b-versatile`   | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| `llama-3.1-70b-versatile`   | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| `llama-3.1-8b-instant`      | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| `mixtral-8x7b-32768`        | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Cross size={18} /> |
+| `gemma2-9b-it`              | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| `openai/gpt-oss-120b`       | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| `openai/gpt-oss-20b`        | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| `whisper-large-v3-turbo`    | N/A                 | N/A                 | N/A                 | N/A                 |
+
+<Note>
+Please see the [Groq documentation](https://console.groq.com/docs/models) for the latest list of available models and their capabilities.
+</Note>

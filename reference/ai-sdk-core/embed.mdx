@@ -1,0 +1,127 @@
+---
+title: embed
+description: API reference for the embed function
+---
+
+Embeds a single value using an embedding model.
+
+```typescript
+import { embed } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await embed({
+  model: openai.embedding('text-embedding-3-small'),
+  value: 'sunny day at the beach',
+});
+
+console.log(result.embedding);
+```
+
+## Parameters
+
+<ParamField path="model" type="EmbeddingModel" required>
+  The embedding model to use.
+</ParamField>
+
+<ParamField path="value" type="string" required>
+  The value that should be embedded.
+</ParamField>
+
+<ParamField path="maxRetries" type="number" default="2">
+  Maximum number of retries per embedding model call. Set to 0 to disable retries.
+</ParamField>
+
+<ParamField path="abortSignal" type="AbortSignal">
+  Abort signal for canceling the embedding request.
+</ParamField>
+
+<ParamField path="headers" type="Record<string, string>">
+  Additional headers to include in the request. Only applicable for HTTP-based providers.
+</ParamField>
+
+<ParamField path="providerOptions" type="ProviderOptions">
+  Additional provider-specific options. They are passed through to the provider from the AI SDK
+  and enable provider-specific functionality that can be fully encapsulated in the provider.
+</ParamField>
+
+<ParamField path="experimental_telemetry" type="TelemetrySettings">
+  Optional telemetry configuration (experimental).
+</ParamField>
+
+## Returns
+
+<ResponseField name="value" type="string">
+  The value that was embedded.
+</ResponseField>
+
+<ResponseField name="embedding" type="number[]">
+  The embedding vector as an array of numbers.
+</ResponseField>
+
+<ResponseField name="usage" type="{ tokens: number }">
+  The token usage for the embedding operation.
+</ResponseField>
+
+<ResponseField name="warnings" type="Array<CallWarning>">
+  Warnings from the embedding model provider (e.g., unsupported settings).
+</ResponseField>
+
+<ResponseField name="providerMetadata" type="ProviderMetadata">
+  Additional provider-specific metadata.
+</ResponseField>
+
+<ResponseField name="response" type="EmbeddingModelResponseMetadata">
+  Response metadata from the embedding model.
+</ResponseField>
+
+## Examples
+
+### Basic embedding
+
+```typescript
+import { embed } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await embed({
+  model: openai.embedding('text-embedding-3-small'),
+  value: 'sunny day at the beach',
+});
+
+console.log(result.embedding);
+// [0.123, -0.456, 0.789, ...]
+```
+
+### With usage tracking
+
+```typescript
+import { embed } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await embed({
+  model: openai.embedding('text-embedding-3-small'),
+  value: 'sunny day at the beach',
+});
+
+console.log('Tokens used:', result.usage.tokens);
+console.log('Embedding dimensions:', result.embedding.length);
+```
+
+### Multiple embeddings
+
+For embedding multiple values efficiently, use [`embedMany`](/reference/ai-sdk-core/embed-many) instead:
+
+```typescript
+import { embedMany } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: [
+    'sunny day at the beach',
+    'rainy day in the mountains',
+    'snowy day in the city',
+  ],
+});
+
+console.log(result.embeddings);
+```

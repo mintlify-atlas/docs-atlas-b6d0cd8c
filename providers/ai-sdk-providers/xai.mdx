@@ -1,0 +1,269 @@
+---
+title: xAI Grok Provider
+description: Learn how to use xAI's Grok models for text generation with real-time web search and X integration.
+---
+
+# xAI Grok Provider
+
+The xAI provider enables you to use Grok models with built-in web search, X (Twitter) integration, and advanced reasoning capabilities.
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @ai-sdk/xai
+```
+
+```bash pnpm
+pnpm add @ai-sdk/xai
+```
+
+```bash yarn
+yarn add @ai-sdk/xai
+```
+
+```bash bun
+bun add @ai-sdk/xai
+```
+</CodeGroup>
+
+## Setup
+
+Get your API key from [xAI Console](https://console.x.ai/) and set it as an environment variable:
+
+```bash
+XAI_API_KEY=your-api-key
+```
+
+## Usage
+
+### Basic Text Generation
+
+```typescript
+import { xai } from '@ai-sdk/xai';
+import { generateText } from 'ai';
+
+const { text } = await generateText({
+  model: xai('grok-3'),
+  prompt: 'Explain artificial general intelligence.',
+});
+```
+
+### Streaming Responses
+
+```typescript
+import { xai } from '@ai-sdk/xai';
+import { streamText } from 'ai';
+
+const result = streamText({
+  model: xai('grok-3'),
+  prompt: 'Write about the future of AI.',
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### Structured Output
+
+```typescript
+import { xai } from '@ai-sdk/xai';
+import { generateObject } from 'ai';
+import { z } from 'zod';
+
+const { object } = await generateObject({
+  model: xai('grok-3'),
+  schema: z.object({
+    insights: z.array(z.string()),
+    sentiment: z.enum(['positive', 'negative', 'neutral']),
+  }),
+  prompt: 'Analyze current AI trends.',
+});
+```
+
+## Configuration
+
+### Custom Provider Instance
+
+```typescript
+import { createXai } from '@ai-sdk/xai';
+
+const xai = createXai({
+  apiKey: process.env.XAI_API_KEY,
+  baseURL: 'https://api.x.ai/v1',
+});
+```
+
+### Provider Options
+
+- **apiKey**: Your xAI API key (defaults to `XAI_API_KEY` env var)
+- **baseURL**: Custom API endpoint URL
+- **headers**: Custom headers for requests
+
+## Available Models
+
+### Chat Models
+
+- `grok-3` - Most capable Grok model
+- `grok-3-mini` - Smaller, faster model
+- `grok-2-vision-1212` - Vision-enabled model
+
+### Agentic Models (Responses API)
+
+- `grok-4-fast-non-reasoning` - Fast agentic model
+- `grok-4-1-fast-reasoning` - Reasoning-enabled agentic model
+
+## Advanced Features
+
+### Live Search
+
+```typescript
+import { xai } from '@ai-sdk/xai';
+import { generateText } from 'ai';
+
+const { text, sources } = await generateText({
+  model: xai('grok-3'),
+  prompt: 'What are the latest AI developments?',
+  providerOptions: {
+    xai: {
+      searchParameters: {
+        mode: 'auto',
+      },
+    },
+  },
+});
+
+console.log('Answer:', text);
+console.log('Sources:', sources);
+```
+
+### Web Search Tool (Responses API)
+
+```typescript
+import { xai } from '@ai-sdk/xai';
+import { generateText } from 'ai';
+
+const { text, sources } = await generateText({
+  model: xai.responses('grok-4-fast-non-reasoning'),
+  prompt: 'Research recent AI breakthroughs',
+  tools: {
+    web_search: xai.tools.webSearch({
+      allowedDomains: ['arxiv.org', 'openai.com'],
+      enableImageUnderstanding: true,
+    }),
+  },
+});
+```
+
+### X Search Tool
+
+```typescript
+import { xai } from '@ai-sdk/xai';
+import { generateText } from 'ai';
+
+const { text, sources } = await generateText({
+  model: xai.responses('grok-4-fast-non-reasoning'),
+  prompt: 'What are people saying about AI on X?',
+  tools: {
+    x_search: xai.tools.xSearch({
+      allowedXHandles: ['elonmusk', 'sama'],
+      enableImageUnderstanding: true,
+    }),
+  },
+});
+```
+
+### Code Execution Tool
+
+```typescript
+import { xai } from '@ai-sdk/xai';
+import { generateText } from 'ai';
+
+const { text } = await generateText({
+  model: xai.responses('grok-4-fast-non-reasoning'),
+  prompt: 'Calculate the compound interest for $10,000 at 5% for 10 years',
+  tools: {
+    code_execution: xai.tools.codeExecution(),
+  },
+});
+```
+
+### Vision
+
+```typescript
+import { xai } from '@ai-sdk/xai';
+import { generateText } from 'ai';
+import fs from 'fs';
+
+const result = await generateText({
+  model: xai.responses('grok-2-vision-1212'),
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Describe this image.' },
+        { type: 'image', image: fs.readFileSync('./image.jpg') },
+      ],
+    },
+  ],
+});
+```
+
+### File Search Tool
+
+```typescript
+import { xai } from '@ai-sdk/xai';
+import { streamText } from 'ai';
+
+const result = streamText({
+  model: xai.responses('grok-4-1-fast-reasoning'),
+  prompt: 'Search my documents for information about AI',
+  tools: {
+    file_search: xai.tools.fileSearch({
+      vectorStoreIds: ['collection_your-id'],
+      maxNumResults: 10,
+    }),
+  },
+  providerOptions: {
+    xai: {
+      include: ['file_search_call.results'],
+    },
+  },
+});
+```
+
+### MCP Server Integration
+
+```typescript
+import { xai } from '@ai-sdk/xai';
+import { generateText } from 'ai';
+
+const { text } = await generateText({
+  model: xai.responses('grok-4-fast-non-reasoning'),
+  prompt: 'Use the weather service',
+  tools: {
+    weather: xai.tools.mcpServer({
+      serverUrl: 'https://weather-api.example.com/mcp',
+      serverLabel: 'weather-service',
+      allowedTools: ['get_weather', 'get_forecast'],
+    }),
+  },
+});
+```
+
+## Model Capabilities
+
+| Model | Vision | Tools | Web Search | X Search |
+|-------|--------|-------|------------|----------|
+| grok-3 | ✗ | ✓ | ✓ | ✗ |
+| grok-3-mini | ✗ | ✓ | ✓ | ✗ |
+| grok-2-vision-1212 | ✓ | ✓ | ✓ | ✗ |
+| grok-4-fast-non-reasoning | ✗ | ✓ | ✓ | ✓ |
+| grok-4-1-fast-reasoning | ✗ | ✓ | ✓ | ✓ |
+
+## Resources
+
+- [xAI Documentation](https://docs.x.ai/)
+- [AI SDK Documentation](/docs)
+- [xAI API Reference](https://docs.x.ai/api)

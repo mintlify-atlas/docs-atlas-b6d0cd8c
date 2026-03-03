@@ -1,0 +1,565 @@
+---
+title: Debugging
+description: Tools and techniques for debugging AI SDK applications
+---
+
+# Debugging
+
+Effective debugging is essential for developing reliable AI applications. This guide covers tools and techniques for debugging AI SDK applications.
+
+## Logging and Inspection
+
+### Basic Logging
+
+Log key information during development:
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-4'),
+  prompt: 'Hello',
+});
+
+console.log('Generated text:', result.text);
+console.log('Token usage:', result.usage);
+console.log('Finish reason:', result.finishReason);
+console.log('Response headers:', result.response?.headers);
+```
+
+### Inspecting Messages
+
+Log the full conversation history:
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const messages = [
+  { role: 'system' as const, content: 'You are a helpful assistant.' },
+  { role: 'user' as const, content: 'What is TypeScript?' },
+];
+
+console.log('Sending messages:', JSON.stringify(messages, null, 2));
+
+const result = await generateText({
+  model: openai('gpt-4'),
+  messages,
+});
+
+console.log('Response:', result.text);
+```
+
+### Tracking Request IDs
+
+Generate unique IDs for tracking:
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+async function generateWithTracking(prompt: string) {
+  const requestId = crypto.randomUUID();
+  const startTime = Date.now();
+
+  console.log(`[${requestId}] Starting request`);
+
+  try {
+    const result = await generateText({
+      model: openai('gpt-4'),
+      prompt,
+    });
+
+    console.log(`[${requestId}] Completed in ${Date.now() - startTime}ms`);
+    console.log(`[${requestId}] Usage:`, result.usage);
+
+    return result;
+  } catch (error) {
+    console.error(`[${requestId}] Error:`, error);
+    throw error;
+  }
+}
+```
+
+## Using AI SDK DevTools
+
+The AI SDK provides built-in DevTools for debugging:
+
+### Setup
+
+```bash
+pnpm install @ai-sdk/devtools
+```
+
+```ts file="lib/ai.ts"
+import { wrapLanguageModel } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { devToolsMiddleware } from '@ai-sdk/devtools';
+
+export const model = wrapLanguageModel({
+  model: openai('gpt-4'),
+  middleware: devToolsMiddleware(),
+});
+```
+
+### Starting DevTools
+
+```bash
+pnpm ai-devtools
+```
+
+Open `http://localhost:3001` to view:
+
+- Request/response history
+- Token usage statistics
+- Performance metrics
+- Error logs
+
+## Middleware for Debugging
+
+### Logging Middleware
+
+Create custom logging middleware:
+
+```ts
+import type {
+  LanguageModelV3Middleware,
+  LanguageModelV3StreamPart,
+} from '@ai-sdk/provider';
+
+export const debugMiddleware: LanguageModelV3Middleware = {
+  specificationVersion: 'v3',
+  wrapGenerate: async ({ doGenerate, params }) => {
+    const requestId = crypto.randomUUID();
+
+    console.group(`[${requestId}] Generate Request`);
+    console.log('Prompt:', params.prompt);
+    console.log('Settings:', {
+      temperature: params.temperature,
+      maxTokens: params.maxOutputTokens,
+    });
+    console.groupEnd();
+
+    const startTime = Date.now();
+    const result = await doGenerate();
+    const duration = Date.now() - startTime;
+
+    console.group(`[${requestId}] Generate Response`);
+    console.log('Duration:', `${duration}ms`);
+    console.log('Text:', result.text);
+    console.log('Usage:', result.usage);
+    console.log('Finish Reason:', result.finishReason);
+    console.groupEnd();
+
+    return result;
+  },
+
+  wrapStream: async ({ doStream, params }) => {
+    const requestId = crypto.randomUUID();
+
+    console.group(`[${requestId}] Stream Request`);
+    console.log('Prompt:', params.prompt);
+    console.groupEnd();
+
+    const { stream, ...rest } = await doStream();
+
+    let chunkCount = 0;
+    let fullText = '';
+
+    const transformStream = new TransformStream<
+      LanguageModelV3StreamPart,
+      LanguageModelV3StreamPart
+    >({
+      transform(chunk, controller) {
+        chunkCount++;
+
+        if (chunk.type === 'text-delta') {
+          fullText += chunk.textDelta;
+        }
+
+        if (chunk.type === 'finish') {
+          console.group(`[${requestId}] Stream Complete`);
+          console.log('Chunks:', chunkCount);
+          console.log('Full text:', fullText);
+          console.log('Usage:', chunk.usage);
+          console.groupEnd();
+        }
+
+        controller.enqueue(chunk);
+      },
+    });
+
+    return {
+      stream: stream.pipeThrough(transformStream),
+      ...rest,
+    };
+  },
+};
+```
+
+Usage:
+
+```ts
+import { wrapLanguageModel } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const model = wrapLanguageModel({
+  model: openai('gpt-4'),
+  middleware: debugMiddleware,
+});
+```
+
+## Streaming Debugging
+
+### Tracking Stream Events
+
+```ts
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = streamText({
+  model: openai('gpt-4'),
+  prompt: 'Count to 10',
+  onChunk: ({ chunk }) => {
+    console.log('Chunk received:', chunk);
+  },
+  onFinish: ({ text, usage }) => {
+    console.log('Stream finished');
+    console.log('Full text:', text);
+    console.log('Token usage:', usage);
+  },
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### Debugging Stream Interruptions
+
+```ts
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = streamText({
+  model: openai('gpt-4'),
+  prompt: 'Write a long story',
+});
+
+let chunkCount = 0;
+let lastChunkTime = Date.now();
+
+try {
+  for await (const chunk of result.textStream) {
+    const now = Date.now();
+    const delay = now - lastChunkTime;
+
+    if (delay > 1000) {
+      console.warn(`Long delay detected: ${delay}ms between chunks`);
+    }
+
+    chunkCount++;
+    lastChunkTime = now;
+    process.stdout.write(chunk);
+  }
+
+  console.log(`\nStream completed with ${chunkCount} chunks`);
+} catch (error) {
+  console.error(`Stream failed after ${chunkCount} chunks:`, error);
+}
+```
+
+## Error Debugging
+
+### Detailed Error Information
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import {
+  APICallError,
+  InvalidArgumentError,
+  TypeValidationError,
+} from 'ai';
+
+try {
+  const result = await generateText({
+    model: openai('gpt-4'),
+    prompt: 'Hello',
+  });
+} catch (error) {
+  if (APICallError.isInstance(error)) {
+    console.error('API Call Failed:');
+    console.error('- Status:', error.statusCode);
+    console.error('- URL:', error.url);
+    console.error('- Response:', error.responseBody);
+    console.error('- Headers:', error.responseHeaders);
+  } else if (InvalidArgumentError.isInstance(error)) {
+    console.error('Invalid Argument:');
+    console.error('- Argument:', error.argument);
+    console.error('- Message:', error.message);
+  } else if (TypeValidationError.isInstance(error)) {
+    console.error('Type Validation Failed:');
+    console.error('- Value:', error.value);
+    console.error('- Cause:', error.cause);
+  } else {
+    console.error('Unknown error:', error);
+  }
+}
+```
+
+### Error Context Wrapper
+
+```ts
+async function debugWrapper<T>(
+  name: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  console.log(`[${name}] Starting...`);
+  const startTime = Date.now();
+
+  try {
+    const result = await fn();
+    console.log(`[${name}] Success in ${Date.now() - startTime}ms`);
+    return result;
+  } catch (error) {
+    console.error(`[${name}] Failed after ${Date.now() - startTime}ms`);
+    console.error(`[${name}] Error:`, error);
+    throw error;
+  }
+}
+
+// Usage
+const result = await debugWrapper('generate-summary', () =>
+  generateText({
+    model: openai('gpt-4'),
+    prompt: 'Summarize this article...',
+  }),
+);
+```
+
+## Tool Call Debugging
+
+### Logging Tool Executions
+
+```ts
+import { generateText, tool } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const result = await generateText({
+  model: openai('gpt-4'),
+  prompt: 'What is the weather in Tokyo?',
+  tools: {
+    getWeather: tool({
+      description: 'Get weather information',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      execute: async ({ location }) => {
+        console.log('Tool called: getWeather');
+        console.log('Parameters:', { location });
+
+        const weather = await fetchWeather(location);
+
+        console.log('Tool result:', weather);
+        return weather;
+      },
+    }),
+  },
+  onStepFinish: ({ toolCalls, toolResults }) => {
+    console.log('Step finished');
+    console.log('Tool calls:', toolCalls);
+    console.log('Tool results:', toolResults);
+  },
+});
+```
+
+### Debugging Tool Input Validation
+
+```ts
+import { tool } from 'ai';
+import { z } from 'zod';
+
+const weatherTool = tool({
+  description: 'Get weather',
+  inputSchema: z.object({
+    location: z.string().min(1),
+    units: z.enum(['celsius', 'fahrenheit']),
+  }),
+  execute: async (input) => {
+    console.log('Validated input:', input);
+    // input is fully typed and validated
+    return await fetchWeather(input.location, input.units);
+  },
+});
+
+// To see validation errors:
+try {
+  await weatherTool.execute({ location: '', units: 'kelvin' });
+} catch (error) {
+  console.error('Validation error:', error);
+}
+```
+
+## Network Debugging
+
+### Custom Fetch for Logging
+
+```ts
+import { createOpenAI } from '@ai-sdk/openai';
+
+const openai = createOpenAI({
+  fetch: async (url, init) => {
+    console.log('Request:', {
+      url,
+      method: init?.method,
+      headers: init?.headers,
+      body: init?.body,
+    });
+
+    const response = await fetch(url, init);
+
+    console.log('Response:', {
+      status: response.status,
+      headers: Object.fromEntries(response.headers.entries()),
+    });
+
+    return response;
+  },
+});
+```
+
+### Debugging Proxy Issues
+
+```ts
+import { createOpenAI } from '@ai-sdk/openai';
+
+const openai = createOpenAI({
+  baseURL: 'http://localhost:8080/v1', // Your proxy
+  fetch: async (url, init) => {
+    console.log('Using proxy:', url);
+
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        ...init?.headers,
+        'X-Debug': 'true',
+      },
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      console.error('Proxy error response:', body);
+    }
+
+    return response;
+  },
+});
+```
+
+## RSC Debugging
+
+### Debugging Streamable UI
+
+```tsx
+import { createStreamableUI } from '@ai-sdk/rsc';
+
+export async function generateUI() {
+  const stream = createStreamableUI(<div>Initial</div>);
+
+  (async () => {
+    console.log('Starting stream');
+
+    stream.update(<div>Update 1</div>);
+    console.log('Updated to state 1');
+
+    await delay(1000);
+
+    stream.update(<div>Update 2</div>);
+    console.log('Updated to state 2');
+
+    await delay(1000);
+
+    stream.done(<div>Final</div>);
+    console.log('Stream completed');
+  })().catch(error => {
+    console.error('Stream error:', error);
+    stream.error(error);
+  });
+
+  return stream.value;
+}
+```
+
+### Debugging AI State
+
+```tsx
+'use server';
+
+import { getAIState, getMutableAIState } from '@ai-sdk/rsc';
+
+export async function debugState() {
+  const currentState = getAIState();
+  console.log('Current AI state:', currentState);
+
+  const mutableState = getMutableAIState();
+  console.log('Mutable AI state:', mutableState.get());
+
+  mutableState.update([...mutableState.get(), { role: 'user', content: 'test' }]);
+  console.log('Updated AI state:', mutableState.get());
+
+  mutableState.done();
+}
+```
+
+## Browser DevTools
+
+### Network Tab
+
+1. Open browser DevTools (F12)
+2. Go to Network tab
+3. Filter by "Fetch/XHR"
+4. Look for API requests
+5. Inspect request/response bodies
+
+### Console Logging in Client Components
+
+```tsx
+'use client';
+
+import { useChat } from 'ai/react';
+
+export default function Chat() {
+  const { messages, input, handleSubmit } = useChat({
+    onFinish: (message) => {
+      console.log('Message completed:', message);
+    },
+    onError: (error) => {
+      console.error('Chat error:', error);
+    },
+  });
+
+  console.log('Current messages:', messages);
+
+  return <div>{/* ... */}</div>;
+}
+```
+
+## Best Practices
+
+1. **Use structured logging**: Log with context and request IDs
+2. **Enable DevTools in development**: Use `@ai-sdk/devtools` for insights
+3. **Log at different levels**: Debug, info, warn, error
+4. **Track performance**: Measure request duration and token usage
+5. **Validate inputs**: Catch errors early with schema validation
+6. **Use error boundaries**: Isolate failures in React components
+7. **Test error paths**: Ensure error handling works correctly
+8. **Monitor production**: Use logging/monitoring services
+
+## Next Steps
+
+- Review [common issues](/docs/troubleshooting/common-issues)
+- Learn about [error recovery](/docs/advanced/error-recovery)
+- Explore [middleware implementation](/docs/advanced/middleware-implementation)

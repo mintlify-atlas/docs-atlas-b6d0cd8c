@@ -1,0 +1,499 @@
+---
+title: Common Issues
+description: Solutions to frequently encountered problems when using the AI SDK
+---
+
+# Common Issues
+
+This guide covers the most common issues developers encounter when using the AI SDK and their solutions.
+
+## API and Authentication Errors
+
+### Missing API Key
+
+**Issue:**
+```
+Error: API key is missing
+```
+
+**Solution:**
+
+Ensure your API key is properly configured:
+
+```bash file=".env.local"
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+```ts
+import { openai } from '@ai-sdk/openai';
+
+// The SDK automatically loads from environment variables
+const result = await generateText({
+  model: openai('gpt-4'),
+  prompt: 'Hello',
+});
+```
+
+### Invalid API Key Format
+
+**Issue:**
+```
+Error: Invalid API key format
+```
+
+**Solution:**
+
+- OpenAI keys start with `sk-`
+- Anthropic keys start with `sk-ant-`
+- Check for whitespace or special characters
+- Verify the key hasn't expired
+
+### Rate Limiting
+
+**Issue:**
+```
+APICallError: Too Many Requests (429)
+```
+
+**Solution:**
+
+Implement retry logic with exponential backoff:
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-4'),
+  prompt: 'Hello',
+  maxRetries: 3, // Built-in retry
+});
+```
+
+Or handle manually:
+
+```ts
+import { APICallError } from 'ai';
+
+try {
+  const result = await generateText({
+    model: openai('gpt-4'),
+    prompt: 'Hello',
+  });
+} catch (error) {
+  if (APICallError.isInstance(error) && error.statusCode === 429) {
+    // Wait before retrying
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    // Retry the request
+  }
+}
+```
+
+## Streaming Issues
+
+### Stream Not Working When Deployed
+
+**Issue:** Streaming works locally but not in production.
+
+**Solution:**
+
+Ensure your deployment platform supports streaming:
+
+```ts file="app/api/chat/route.ts"
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+export const runtime = 'edge'; // Enable Edge Runtime
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+
+  const result = streamText({
+    model: openai('gpt-4'),
+    messages,
+  });
+
+  return result.toDataStreamResponse();
+}
+```
+
+For Vercel:
+- Use Edge Runtime or Node.js 18+
+- Ensure `runtime = 'edge'` or `runtime = 'nodejs'` is set
+
+### Buffering by Proxy/CDN
+
+**Issue:** Responses are buffered by proxies or CDNs.
+
+**Solution:**
+
+Disable response buffering:
+
+```ts
+// For Nginx
+// proxy_buffering off;
+// X-Accel-Buffering: no
+
+export async function POST(req: Request) {
+  const result = streamText({
+    model: openai('gpt-4'),
+    prompt: 'Hello',
+  });
+
+  const response = result.toDataStreamResponse();
+  response.headers.set('X-Accel-Buffering', 'no');
+  return response;
+}
+```
+
+### Stream Timeout on Vercel
+
+**Issue:** Streams timeout after 30 seconds on Vercel Hobby.
+
+**Solution:**
+
+- Upgrade to Vercel Pro for 5-minute timeouts
+- Or use Edge Runtime (no timeout):
+
+```ts
+export const runtime = 'edge';
+```
+
+## RSC Issues
+
+### Streamable UI Not Updating
+
+**Issue:** UI remains in loading state.
+
+**Solution:**
+
+Always call `.done()`:
+
+```tsx
+import { createStreamableUI } from '@ai-sdk/rsc';
+
+export async function generateComponent() {
+  const stream = createStreamableUI(<div>Loading...</div>);
+
+  (async () => {
+    stream.update(<div>Processing...</div>);
+    stream.done(<div>Complete!</div>); // Required!
+  })();
+
+  return stream.value;
+}
+```
+
+### Server Actions in Client Components
+
+**Issue:**
+```
+Error: Server Actions must be defined in a separate file
+```
+
+**Solution:**
+
+Move server actions to a separate file:
+
+```ts file="app/actions.ts"
+'use server';
+
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+export async function getAnswer(question: string) {
+  const { text } = await generateText({
+    model: openai('gpt-4'),
+    prompt: question,
+  });
+  return text;
+}
+```
+
+```tsx file="app/page.tsx"
+'use client';
+
+import { getAnswer } from './actions';
+
+export default function Page() {
+  const handleSubmit = async (question: string) => {
+    const answer = await getAnswer(question);
+    console.log(answer);
+  };
+
+  return <form>{/* ... */}</form>;
+}
+```
+
+### File Extension Error (.ts vs .tsx)
+
+**Issue:**
+```
+Error: Cannot find 'div'
+```
+
+**Solution:**
+
+Use `.tsx` extension for files with JSX:
+
+```tsx file="app/actions.tsx" // Changed from .ts to .tsx
+'use server';
+
+import { createStreamableUI } from '@ai-sdk/rsc';
+
+export async function generateUI() {
+  const stream = createStreamableUI(<div>Hello</div>);
+  stream.done();
+  return stream.value;
+}
+```
+
+## Tool Calling Issues
+
+### Tools Not Being Called
+
+**Issue:** Model doesn't call your tools.
+
+**Solution:**
+
+1. Improve tool descriptions:
+
+```ts
+import { generateText, tool } from 'ai';
+import { z } from 'zod';
+
+const result = await generateText({
+  model: openai('gpt-4'),
+  prompt: 'What is the weather in San Francisco?',
+  tools: {
+    getWeather: tool({
+      description: 'Get the current weather for a specific location. Use this when the user asks about weather conditions.', // Be specific!
+      inputSchema: z.object({
+        location: z.string().describe('The city and country, e.g. "San Francisco, US"'),
+      }),
+      execute: async ({ location }) => {
+        return await fetchWeather(location);
+      },
+    }),
+  },
+});
+```
+
+2. Use `toolChoice: 'required'`:
+
+```ts
+const result = await generateText({
+  model: openai('gpt-4'),
+  prompt: 'Get weather for Tokyo',
+  tools: { getWeather },
+  toolChoice: 'required', // Force tool usage
+});
+```
+
+### Invalid Tool Input
+
+**Issue:**
+```
+InvalidToolInputError: Tool received invalid input
+```
+
+**Solution:**
+
+Validate and provide better schemas:
+
+```ts
+import { z } from 'zod';
+
+const weatherTool = tool({
+  description: 'Get weather information',
+  inputSchema: z.object({
+    location: z.string().min(1, 'Location cannot be empty'),
+    units: z.enum(['celsius', 'fahrenheit']).default('celsius'),
+    includeHourly: z.boolean().optional(),
+  }),
+  execute: async (input) => {
+    // Input is validated and typed
+    return await fetchWeather(input.location, input.units);
+  },
+});
+```
+
+## TypeScript Issues
+
+### Model Not Assignable to Type
+
+**Issue:**
+```
+Type 'string' is not assignable to type 'LanguageModel'
+```
+
+**Solution:**
+
+Use the model instance, not a string:
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// ❌ Wrong
+const result = await generateText({
+  model: 'gpt-4', // String
+  prompt: 'Hello',
+});
+
+// ✅ Correct
+const result = await generateText({
+  model: openai('gpt-4'), // Model instance
+  prompt: 'Hello',
+});
+```
+
+### Cannot Find Namespace 'JSX'
+
+**Issue:**
+```
+Error: Cannot find namespace 'JSX'
+```
+
+**Solution:**
+
+Ensure `tsconfig.json` includes React types:
+
+```json file="tsconfig.json"
+{
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["dom", "dom.iterable", "esnext"]
+  }
+}
+```
+
+## Message Format Issues
+
+### useChat Stale Body Data
+
+**Issue:** Chat messages contain stale or incorrect data.
+
+**Solution:**
+
+Ensure proper message state management:
+
+```tsx
+'use client';
+
+import { useChat } from 'ai/react';
+
+export default function Chat() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: '/api/chat',
+    onFinish: (message) => {
+      // Message is complete
+      console.log('Finished:', message);
+    },
+  });
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {messages.map(m => (
+        <div key={m.id}>
+          {m.role}: {m.content}
+        </div>
+      ))}
+      <input value={input} onChange={handleInputChange} />
+    </form>
+  );
+}
+```
+
+### Failed to Parse Stream
+
+**Issue:**
+```
+Error: Failed to parse stream
+```
+
+**Solution:**
+
+Ensure the API returns the correct format:
+
+```ts file="app/api/chat/route.ts"
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+
+  const result = streamText({
+    model: openai('gpt-4'),
+    messages,
+  });
+
+  // Use the built-in response formatter
+  return result.toDataStreamResponse();
+}
+```
+
+## Performance Issues
+
+### Slow TypeScript Compilation with Zod
+
+**Issue:** TypeScript compilation is very slow.
+
+**Solution:**
+
+Use simpler schemas or increase TypeScript memory:
+
+```bash
+node --max-old-space-size=8192 node_modules/typescript/bin/tsc
+```
+
+Or simplify schemas:
+
+```ts
+// Instead of complex nested schemas
+const complexSchema = z.object({
+  // ...
+});
+
+// Use z.any() for deeply nested parts
+const simplifiedSchema = z.object({
+  data: z.any(),
+});
+```
+
+### High Memory Usage with Images
+
+**Issue:** Application uses too much memory when processing images.
+
+**Solution:**
+
+Stream images or process in batches:
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { readFileSync } from 'fs';
+
+// Instead of loading all at once
+const images = files.map(f => readFileSync(f));
+
+// Process one at a time
+for (const file of files) {
+  const image = readFileSync(file);
+  const result = await generateText({
+    model: openai('gpt-4'),
+    messages: [{
+      role: 'user',
+      content: [{ type: 'image', image }],
+    }],
+  });
+  // Process result
+}
+```
+
+## Next Steps
+
+- Learn about [debugging](/docs/troubleshooting/debugging) techniques
+- Review [error recovery](/docs/advanced/error-recovery) strategies
+- Check the [API reference](/docs/reference/ai-sdk-core)

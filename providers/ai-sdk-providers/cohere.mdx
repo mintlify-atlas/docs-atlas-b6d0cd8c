@@ -1,0 +1,238 @@
+---
+title: Cohere Provider
+description: Learn how to use Cohere models for text generation, embeddings, and reranking with the AI SDK.
+---
+
+# Cohere Provider
+
+The Cohere provider enables you to use Cohere's language models for text generation, embeddings, and document reranking.
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @ai-sdk/cohere
+```
+
+```bash pnpm
+pnpm add @ai-sdk/cohere
+```
+
+```bash yarn
+yarn add @ai-sdk/cohere
+```
+
+```bash bun
+bun add @ai-sdk/cohere
+```
+</CodeGroup>
+
+## Setup
+
+Get your API key from [Cohere Dashboard](https://dashboard.cohere.com/) and set it as an environment variable:
+
+```bash
+COHERE_API_KEY=your-api-key
+```
+
+## Usage
+
+### Basic Text Generation
+
+```typescript
+import { cohere } from '@ai-sdk/cohere';
+import { generateText } from 'ai';
+
+const { text } = await generateText({
+  model: cohere('command-r-plus'),
+  prompt: 'Explain natural language processing.',
+});
+```
+
+### Streaming Responses
+
+```typescript
+import { cohere } from '@ai-sdk/cohere';
+import { streamText } from 'ai';
+
+const result = streamText({
+  model: cohere('command-r-plus'),
+  prompt: 'Write about language models.',
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### Structured Output
+
+```typescript
+import { cohere } from '@ai-sdk/cohere';
+import { generateObject } from 'ai';
+import { z } from 'zod';
+
+const { object } = await generateObject({
+  model: cohere('command-r-plus'),
+  schema: z.object({
+    summary: z.string(),
+    keywords: z.array(z.string()),
+  }),
+  prompt: 'Extract information from this text.',
+});
+```
+
+## Configuration
+
+### Custom Provider Instance
+
+```typescript
+import { createCohere } from '@ai-sdk/cohere';
+
+const cohere = createCohere({
+  apiKey: process.env.COHERE_API_KEY,
+  baseURL: 'https://api.cohere.com/v2',
+});
+```
+
+### Provider Options
+
+- **apiKey**: Your Cohere API key (defaults to `COHERE_API_KEY` env var)
+- **baseURL**: Custom API endpoint URL
+- **headers**: Custom headers for requests
+
+## Available Models
+
+### Text Models
+
+- `command-a-03-2025` - Latest Command model
+- `command-r-plus` - Most capable model
+- `command-r` - Balanced performance
+- `command-r7b-12-2024` - Efficient 7B model
+
+### Reasoning Models
+
+- `command-a-reasoning-08-2025` - Reasoning model
+
+## Advanced Features
+
+### Tool Calling
+
+```typescript
+import { cohere } from '@ai-sdk/cohere';
+import { generateText } from 'ai';
+import { z } from 'zod';
+
+const result = await generateText({
+  model: cohere('command-r-plus'),
+  tools: {
+    search_docs: {
+      description: 'Search documentation',
+      parameters: z.object({
+        query: z.string(),
+      }),
+      execute: async ({ query }) => {
+        return { results: [] };
+      },
+    },
+  },
+  prompt: 'Find information about embeddings.',
+});
+```
+
+### Reasoning
+
+```typescript
+import { cohere } from '@ai-sdk/cohere';
+import { generateText } from 'ai';
+
+const { text, reasoning } = await generateText({
+  model: cohere('command-a-reasoning-08-2025'),
+  prompt: 'How many sisters does Alice\'s brother have if Alice has 3 brothers and 2 sisters?',
+  providerOptions: {
+    cohere: {
+      thinking: {
+        type: 'enabled',
+        tokenBudget: 100,
+      },
+    },
+  },
+});
+
+console.log('Reasoning:', reasoning);
+console.log('Answer:', text);
+```
+
+### Embeddings
+
+```typescript
+import { cohere } from '@ai-sdk/cohere';
+import { embed } from 'ai';
+
+const { embedding } = await embed({
+  model: cohere.embedding('embed-english-v3.0'),
+  value: 'Document to embed',
+  providerOptions: {
+    cohere: {
+      inputType: 'search_document',
+    },
+  },
+});
+```
+
+**Available Models:**
+- `embed-english-v3.0` (1024 dimensions)
+- `embed-multilingual-v3.0` (1024 dimensions)
+- `embed-english-light-v3.0` (384 dimensions)
+
+**Input Types:**
+- `search_document` - For documents in a vector database
+- `search_query` - For search queries
+- `classification` - For classification tasks
+- `clustering` - For clustering tasks
+
+### Reranking
+
+```typescript
+import { cohere } from '@ai-sdk/cohere';
+import { rerank } from 'ai';
+
+const documents = [
+  'AI is transforming healthcare.',
+  'Machine learning powers recommendations.',
+  'Cloud computing enables scalability.',
+];
+
+const { ranking } = await rerank({
+  model: cohere.reranking('rerank-v3.5'),
+  documents,
+  query: 'artificial intelligence applications',
+  topN: 2,
+});
+
+console.log(ranking);
+// [
+//   { originalIndex: 0, score: 0.95, document: 'AI is transforming healthcare.' },
+//   { originalIndex: 1, score: 0.87, document: 'Machine learning powers recommendations.' }
+// ]
+```
+
+**Available Models:**
+- `rerank-v3.5` - Latest reranking model
+- `rerank-english-v3.0` - English-only
+- `rerank-multilingual-v3.0` - Multilingual support
+
+## Model Capabilities
+
+| Model | Tools | Structured Output | Reasoning |
+|-------|-------|-------------------|----------|
+| command-a-03-2025 | ✓ | ✓ | ✗ |
+| command-r-plus | ✓ | ✓ | ✗ |
+| command-r | ✓ | ✓ | ✗ |
+| command-a-reasoning | ✓ | ✓ | ✓ |
+
+## Resources
+
+- [Cohere Documentation](https://docs.cohere.com/)
+- [AI SDK Documentation](/docs)
+- [Cohere API Reference](https://docs.cohere.com/reference)

@@ -1,0 +1,318 @@
+---
+title: ToolLoopAgent
+description: API reference for the ToolLoopAgent class
+---
+
+A tool loop agent that runs tools in a loop. In each step, it calls the LLM, and if there are tool calls, it executes the tools and calls the LLM again in a new step with the tool results.
+
+The loop continues until:
+- A finish reason other than tool-calls is returned, or
+- A tool that is invoked does not have an execute function, or
+- A tool call needs approval, or
+- A stop condition is met (default stop condition is `stepCountIs(20)`)
+
+```typescript
+import { ToolLoopAgent } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const agent = new ToolLoopAgent({
+  model: openai('gpt-4-turbo'),
+  tools: {
+    weather: tool({
+      description: 'Get the weather for a location',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      execute: async ({ location }) => {
+        // Call weather API
+        return { temperature: 72, condition: 'sunny' };
+      },
+    }),
+  },
+  instructions: 'You are a helpful assistant.',
+});
+
+const result = await agent.generate({
+  prompt: 'What is the weather in San Francisco?',
+});
+```
+
+## Constructor
+
+### Parameters
+
+<ParamField path="model" type="LanguageModel" required>
+  The language model to use.
+</ParamField>
+
+<ParamField path="tools" type="ToolSet">
+  The tools that the agent can use.
+</ParamField>
+
+<ParamField path="instructions" type="string">
+  System instructions for the agent. This is the system prompt that will be used for all calls.
+</ParamField>
+
+<ParamField path="id" type="string">
+  Optional ID for the agent.
+</ParamField>
+
+<ParamField path="toolChoice" type="ToolChoice">
+  The tool choice strategy. Default: `'auto'`.
+</ParamField>
+
+<ParamField path="maxOutputTokens" type="number">
+  Maximum number of tokens to generate.
+</ParamField>
+
+<ParamField path="temperature" type="number">
+  Temperature setting.
+</ParamField>
+
+<ParamField path="topP" type="number">
+  Nucleus sampling.
+</ParamField>
+
+<ParamField path="topK" type="number">
+  Only sample from the top K options for each subsequent token.
+</ParamField>
+
+<ParamField path="presencePenalty" type="number">
+  Presence penalty setting.
+</ParamField>
+
+<ParamField path="frequencyPenalty" type="number">
+  Frequency penalty setting.
+</ParamField>
+
+<ParamField path="stopSequences" type="Array<string>">
+  Stop sequences.
+</ParamField>
+
+<ParamField path="seed" type="number">
+  The seed (integer) to use for random sampling.
+</ParamField>
+
+<ParamField path="stopWhen" type="StopCondition | Array<StopCondition>" default="stepCountIs(20)">
+  Condition for stopping the agent when there are tool results in the last step.
+</ParamField>
+
+<ParamField path="output" type="Output">
+  Optional specification for parsing structured outputs from the LLM response.
+</ParamField>
+
+<ParamField path="activeTools" type="Array<keyof TOOLS>">
+  Limits the tools that are available for the model to call.
+</ParamField>
+
+<ParamField path="prepareStep" type="PrepareStepFunction">
+  Optional function that you can use to provide different settings for a step.
+</ParamField>
+
+<ParamField path="prepareCall" type="PrepareCallFunction">
+  Optional function that is called before each agent invocation to prepare the call arguments.
+</ParamField>
+
+<ParamField path="experimental_repairToolCall" type="ToolCallRepairFunction">
+  A function that attempts to repair a tool call that failed to parse.
+</ParamField>
+
+<ParamField path="experimental_download" type="DownloadFunction">
+  Custom download function to use for URLs.
+</ParamField>
+
+<ParamField path="experimental_context" type="unknown">
+  Context that is passed into tool execution.
+</ParamField>
+
+<ParamField path="experimental_telemetry" type="TelemetrySettings">
+  Optional telemetry configuration (experimental).
+</ParamField>
+
+<ParamField path="providerOptions" type="ProviderOptions">
+  Additional provider-specific options.
+</ParamField>
+
+<ParamField path="experimental_onStart" type="(event: OnStartEvent) => void">
+  Callback invoked when generation begins, before any LLM calls.
+</ParamField>
+
+<ParamField path="experimental_onStepStart" type="(event: OnStepStartEvent) => void">
+  Callback invoked when each step begins, before the provider is called.
+</ParamField>
+
+<ParamField path="experimental_onToolCallStart" type="(event: OnToolCallStartEvent) => void">
+  Callback invoked before each tool execution begins.
+</ParamField>
+
+<ParamField path="experimental_onToolCallFinish" type="(event: OnToolCallFinishEvent) => void">
+  Callback invoked after each tool execution completes.
+</ParamField>
+
+<ParamField path="onStepFinish" type="(event: OnStepFinishEvent) => void">
+  Callback that is called when each step (LLM call) is finished.
+</ParamField>
+
+<ParamField path="onFinish" type="(event: OnFinishEvent) => void">
+  Callback that is called when all steps are finished.
+</ParamField>
+
+## Properties
+
+<ResponseField name="id" type="string | undefined">
+  The ID of the agent.
+</ResponseField>
+
+<ResponseField name="tools" type="TOOLS">
+  The tools that the agent can use.
+</ResponseField>
+
+<ResponseField name="version" type="'agent-v1'">
+  The version of the agent API.
+</ResponseField>
+
+## Methods
+
+### generate()
+
+Generates an output from the agent (non-streaming).
+
+#### Parameters
+
+<ParamField path="prompt" type="string | Array<ModelMessage>">
+  The prompt for the agent.
+</ParamField>
+
+<ParamField path="messages" type="Array<ModelMessage>">
+  Alternative to `prompt`: provide a list of messages directly.
+</ParamField>
+
+<ParamField path="options" type="CALL_OPTIONS">
+  Call-specific options (if configured in `prepareCall`).
+</ParamField>
+
+<ParamField path="abortSignal" type="AbortSignal">
+  An optional abort signal that can be used to cancel the call.
+</ParamField>
+
+<ParamField path="timeout" type="number">
+  An optional timeout in milliseconds.
+</ParamField>
+
+<ParamField path="experimental_onStart" type="(event: OnStartEvent) => void">
+  Callback invoked when generation begins. Merges with the agent's callback.
+</ParamField>
+
+<ParamField path="experimental_onStepStart" type="(event: OnStepStartEvent) => void">
+  Callback invoked when each step begins. Merges with the agent's callback.
+</ParamField>
+
+<ParamField path="experimental_onToolCallStart" type="(event: OnToolCallStartEvent) => void">
+  Callback invoked before each tool execution. Merges with the agent's callback.
+</ParamField>
+
+<ParamField path="experimental_onToolCallFinish" type="(event: OnToolCallFinishEvent) => void">
+  Callback invoked after each tool execution. Merges with the agent's callback.
+</ParamField>
+
+<ParamField path="onStepFinish" type="(event: OnStepFinishEvent) => void">
+  Callback when each step finishes. Merges with the agent's callback.
+</ParamField>
+
+<ParamField path="onFinish" type="(event: OnFinishEvent) => void">
+  Callback when all steps finish. Merges with the agent's callback.
+</ParamField>
+
+#### Returns
+
+Returns a `Promise<GenerateTextResult>` with the same properties as [`generateText`](/reference/ai-sdk-core/generate-text).
+
+### stream()
+
+Streams an output from the agent.
+
+#### Parameters
+
+Same parameters as `generate()`, plus:
+
+<ParamField path="experimental_transform" type="StreamTextTransform | Array<StreamTextTransform>">
+  Optional stream transformations.
+</ParamField>
+
+#### Returns
+
+Returns a `Promise<StreamTextResult>` with the same properties as [`streamText`](/reference/ai-sdk-core/stream-text).
+
+## Examples
+
+### Basic agent
+
+```typescript
+import { ToolLoopAgent } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const agent = new ToolLoopAgent({
+  model: openai('gpt-4-turbo'),
+  tools: {
+    weather: tool({
+      description: 'Get the weather for a location',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      execute: async ({ location }) => {
+        // Call weather API
+        return { temperature: 72, condition: 'sunny' };
+      },
+    }),
+  },
+  instructions: 'You are a helpful assistant.',
+});
+
+const result = await agent.generate({
+  prompt: 'What is the weather in San Francisco?',
+});
+
+console.log(result.text);
+```
+
+### With streaming
+
+```typescript
+const agent = new ToolLoopAgent({
+  model: openai('gpt-4-turbo'),
+  tools: { /* ... */ },
+  instructions: 'You are a helpful assistant.',
+});
+
+const result = await agent.stream({
+  prompt: 'Tell me about the weather',
+});
+
+for await (const textPart of result.textStream) {
+  process.stdout.write(textPart);
+}
+```
+
+### With callbacks
+
+```typescript
+const agent = new ToolLoopAgent({
+  model: openai('gpt-4-turbo'),
+  tools: { /* ... */ },
+  instructions: 'You are a helpful assistant.',
+  onStepFinish: (event) => {
+    console.log('Step', event.stepNumber, 'finished');
+    console.log('Tool calls:', event.toolCalls);
+  },
+  onFinish: (event) => {
+    console.log('Agent finished');
+    console.log('Total usage:', event.totalUsage);
+  },
+});
+
+const result = await agent.generate({
+  prompt: 'What is the weather in San Francisco?',
+});
+```

@@ -1,0 +1,80 @@
+---
+title: Workflow Agent
+description: API reference for workflow agents
+---
+
+<Note>
+  Workflow agents are currently not available in the AI SDK. This page is a placeholder for future functionality.
+  
+  For multi-step agent workflows, use [`ToolLoopAgent`](/reference/agents/tool-loop-agent) with custom step logic in the `prepareStep` callback.
+</Note>
+
+## Alternative: Custom multi-step workflows
+
+You can implement custom workflow logic using `ToolLoopAgent` or by chaining multiple `generateText` calls:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// Step 1: Generate initial response
+const step1 = await generateText({
+  model: openai('gpt-4-turbo'),
+  prompt: 'Analyze this text: ...',
+});
+
+// Step 2: Process the result
+const step2 = await generateText({
+  model: openai('gpt-4-turbo'),
+  messages: [
+    { role: 'user', content: 'Analyze this text: ...' },
+    { role: 'assistant', content: step1.text },
+    { role: 'user', content: 'Now summarize your analysis' },
+  ],
+});
+
+console.log(step2.text);
+```
+
+## Using ToolLoopAgent for workflows
+
+The `ToolLoopAgent` can be configured to implement complex workflows:
+
+```typescript
+import { ToolLoopAgent } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const agent = new ToolLoopAgent({
+  model: openai('gpt-4-turbo'),
+  tools: {
+    // Define workflow steps as tools
+    analyzeText: tool({
+      description: 'Analyze the provided text',
+      inputSchema: z.object({ text: z.string() }),
+      execute: async ({ text }) => {
+        // Analysis logic
+        return { sentiment: 'positive', topics: ['AI', 'technology'] };
+      },
+    }),
+    summarize: tool({
+      description: 'Summarize the analysis results',
+      inputSchema: z.object({ analysis: z.object({}) }),
+      execute: async ({ analysis }) => {
+        // Summarization logic
+        return { summary: 'The text discusses AI and technology positively' };
+      },
+    }),
+  },
+  instructions: 'You are a workflow automation assistant. Execute the steps in order.',
+  prepareStep: ({ steps, messages }) => {
+    // Custom logic to prepare each step
+    return {
+      // Modify settings based on step number or previous results
+    };
+  },
+});
+
+const result = await agent.generate({
+  prompt: 'Analyze and summarize this article: ...',
+});
+```

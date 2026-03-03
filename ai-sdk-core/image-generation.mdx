@@ -1,0 +1,258 @@
+---
+title: Image Generation
+description: Learn how to generate images with the AI SDK.
+---
+
+# Image Generation
+
+The AI SDK provides the [`generateImage`](/docs/reference/ai-sdk-core/generate-image)
+function to generate images based on a given prompt using an image model.
+
+```tsx
+import { generateImage } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { image } = await generateImage({
+  model: openai.image('dall-e-3'),
+  prompt: 'Santa Claus driving a Cadillac',
+});
+```
+
+You can access the image data using the `base64` or `uint8Array` properties:
+
+```tsx
+const base64 = image.base64; // base64 image data
+const uint8Array = image.uint8Array; // Uint8Array image data
+```
+
+## Settings
+
+### Size and Aspect Ratio
+
+Depending on the model, you can either specify the size or the aspect ratio.
+
+#### Size
+
+The size is specified as a string in the format `{width}x{height}`.
+Models only support a few sizes, and the supported sizes are different for each model and provider.
+
+```tsx highlight={"7"}
+import { generateImage } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { image } = await generateImage({
+  model: openai.image('dall-e-3'),
+  prompt: 'Santa Claus driving a Cadillac',
+  size: '1024x1024',
+});
+```
+
+#### Aspect Ratio
+
+The aspect ratio is specified as a string in the format `{width}:{height}`.
+Models only support a few aspect ratios, and the supported aspect ratios are different for each model and provider.
+
+```tsx highlight={"7"}
+import { generateImage } from 'ai';
+import { vertex } from '@ai-sdk/google-vertex';
+
+const { image } = await generateImage({
+  model: vertex.image('imagen-4.0-generate-001'),
+  prompt: 'Santa Claus driving a Cadillac',
+  aspectRatio: '16:9',
+});
+```
+
+### Generating Multiple Images
+
+`generateImage` also supports generating multiple images at once:
+
+```tsx highlight={"7"}
+import { generateImage } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { images } = await generateImage({
+  model: openai.image('dall-e-2'),
+  prompt: 'Santa Claus driving a Cadillac',
+  n: 4, // number of images to generate
+});
+```
+
+<Note>
+  `generateImage` will automatically call the model as often as needed (in
+  parallel) to generate the requested number of images.
+</Note>
+
+Each image model has an internal limit on how many images it can generate in a single API call. The AI SDK manages this automatically by batching requests appropriately when you request multiple images using the `n` parameter. By default, the SDK uses provider-documented limits (for example, DALL-E 3 can only generate 1 image per call, while DALL-E 2 supports up to 10).
+
+If needed, you can override this behavior using the `maxImagesPerCall` setting:
+
+```tsx highlight={"7"}
+import { generateImage } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { images } = await generateImage({
+  model: openai.image('dall-e-2'),
+  prompt: 'Santa Claus driving a Cadillac',
+  maxImagesPerCall: 5, // Override the default batch size
+  n: 10, // Will make 2 calls of 5 images each
+});
+```
+
+### Providing a Seed
+
+Some image models support seeds for reproducible generation:
+
+```tsx highlight={"7"}
+import { generateImage } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { image } = await generateImage({
+  model: openai.image('dall-e-3'),
+  prompt: 'Santa Claus driving a Cadillac',
+  seed: 12345,
+});
+```
+
+### Provider Options
+
+Image model settings can be configured using `providerOptions` for provider-specific parameters:
+
+```tsx highlight={"7-11"}
+import { generateImage } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { image } = await generateImage({
+  model: openai.image('dall-e-3'),
+  prompt: 'Santa Claus driving a Cadillac',
+  providerOptions: {
+    openai: {
+      style: 'vivid', // or 'natural'
+    },
+  },
+});
+```
+
+## Image Editing
+
+### Image-to-Image
+
+Some models support image-to-image generation, where you provide a source image along with a prompt:
+
+```tsx highlight={"6-9"}
+import { generateImage } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { readFile } from 'fs/promises';
+
+const { image } = await generateImage({
+  model: openai.image('dall-e-2'),
+  prompt: {
+    images: [await readFile('source.png')],
+    text: 'Make it snowy',
+  },
+});
+```
+
+### Inpainting with Masks
+
+You can also provide a mask to specify which parts of the image should be regenerated:
+
+```tsx highlight={"8-11"}
+import { generateImage } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { readFile } from 'fs/promises';
+
+const { image } = await generateImage({
+  model: openai.image('dall-e-2'),
+  prompt: {
+    images: [await readFile('source.png')],
+    mask: await readFile('mask.png'),
+    text: 'Add a Christmas tree',
+  },
+});
+```
+
+## Response Information
+
+The `generateImage` function returns comprehensive response information:
+
+```tsx highlight={"6-8"}
+import { generateImage } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateImage({
+  model: openai.image('dall-e-3'),
+  prompt: 'Santa Claus driving a Cadillac',
+});
+
+console.log(result.images); // Array of generated images
+console.log(result.warnings); // Any warnings from the provider
+console.log(result.responses); // Raw provider responses
+console.log(result.usage); // Token usage information
+```
+
+## Retries
+
+The `generateImage` function accepts an optional `maxRetries` parameter
+that you can use to set the maximum number of retries.
+It defaults to `2` retries (3 attempts in total). You can set it to `0` to disable retries.
+
+```tsx highlight={"7"}
+import { generateImage } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { image } = await generateImage({
+  model: openai.image('dall-e-3'),
+  prompt: 'Santa Claus driving a Cadillac',
+  maxRetries: 0, // Disable retries
+});
+```
+
+## Abort Signals and Timeouts
+
+The `generateImage` function accepts an optional `abortSignal` parameter of
+type [`AbortSignal`](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal)
+that you can use to abort the generation process or set a timeout.
+
+```tsx highlight={"7"}
+import { generateImage } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { image } = await generateImage({
+  model: openai.image('dall-e-3'),
+  prompt: 'Santa Claus driving a Cadillac',
+  abortSignal: AbortSignal.timeout(30000), // Abort after 30 seconds
+});
+```
+
+## Custom Headers
+
+The `generateImage` function accepts an optional `headers` parameter
+that you can use to add custom headers to the request.
+
+```tsx highlight={"7"}
+import { generateImage } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { image } = await generateImage({
+  model: openai.image('dall-e-3'),
+  prompt: 'Santa Claus driving a Cadillac',
+  headers: { 'X-Custom-Header': 'custom-value' },
+});
+```
+
+## Image Providers & Models
+
+Several providers offer image generation models:
+
+| Provider                                                                              | Model                         |
+| ------------------------------------------------------------------------------------- | ----------------------------- |
+| [OpenAI](/providers/ai-sdk-providers/openai#image-models)                             | `dall-e-3`                    |
+| [OpenAI](/providers/ai-sdk-providers/openai#image-models)                             | `dall-e-2`                    |
+| [Google Vertex AI](/providers/ai-sdk-providers/google-vertex#image-models)            | `imagen-4.0-generate-001`     |
+| [Google Vertex AI](/providers/ai-sdk-providers/google-vertex#image-models)            | `imagen-3.0-generate-001`     |
+| [Stability AI](/providers/ai-sdk-providers/stability-ai#image-models)                 | `stable-diffusion-v1-6`       |
+| [Stability AI](/providers/ai-sdk-providers/stability-ai#image-models)                 | `stable-diffusion-xl-1024-v1` |
+| [Black Forest Labs (via fal.ai)](/providers/ai-sdk-providers/fal#image-models)        | `flux/schnell`                |
+| [Black Forest Labs (via fal.ai)](/providers/ai-sdk-providers/fal#image-models)        | `flux-pro`                    |
+| [Amazon Bedrock](/providers/ai-sdk-providers/amazon-bedrock#image-models)             | `stability.stable-diffusion-*`|

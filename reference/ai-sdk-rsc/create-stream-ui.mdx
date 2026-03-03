@@ -1,0 +1,259 @@
+---
+title: createStreamableUI
+description: API reference for the createStreamableUI function
+---
+
+Creates a piece of changeable UI that can be streamed to the client in React Server Components.
+
+On the client side, it can be rendered as a normal React node.
+
+```typescript
+import { createStreamableUI } from 'ai/rsc';
+
+export async function getWeather() {
+  const ui = createStreamableUI(<div>Loading...</div>);
+
+  (async () => {
+    const weather = await fetchWeather();
+    ui.done(<div>Temperature: {weather.temp}°F</div>);
+  })();
+
+  return ui.value;
+}
+```
+
+## Parameters
+
+<ParamField path="initialValue" type="ReactNode">
+  The initial React node to display.
+</ParamField>
+
+## Returns
+
+Returns a `StreamableUIWrapper` object with the following properties and methods:
+
+<ResponseField name="value" type="ReactNode">
+  The value of the streamable UI. This can be returned from a Server Action and received by the client.
+</ResponseField>
+
+<ResponseField name="update" type="(value: ReactNode) => StreamableUIWrapper">
+  This method updates the current UI node. It takes a new UI node and replaces the old one.
+  Returns the streamable UI wrapper for chaining.
+</ResponseField>
+
+<ResponseField name="append" type="(value: ReactNode) => StreamableUIWrapper">
+  This method is used to append a new UI node to the end of the old one.
+  Once a new UI node is appended, the previous UI node cannot be updated anymore.
+  Returns the streamable UI wrapper for chaining.
+</ResponseField>
+
+<ResponseField name="error" type="(error: any) => StreamableUIWrapper">
+  This method is used to signal that there is an error in the UI stream.
+  It will be thrown on the client side and caught by the nearest error boundary component.
+  Returns the streamable UI wrapper for chaining.
+</ResponseField>
+
+<ResponseField name="done" type="(...args: [ReactNode] | []) => StreamableUIWrapper">
+  This method marks the UI node as finalized. You can either call it without any parameters
+  or with a new UI node as the final state. Once called, the UI node cannot be updated or appended anymore.
+  
+  **This method is always required to be called**, otherwise the response will be stuck in a loading state.
+  
+  Returns the streamable UI wrapper for chaining.
+</ResponseField>
+
+## Examples
+
+### Basic usage
+
+```typescript
+import { createStreamableUI } from 'ai/rsc';
+
+export async function getWeather() {
+  const ui = createStreamableUI(<div>Loading weather...</div>);
+
+  (async () => {
+    const weather = await fetchWeather('San Francisco');
+    ui.done(
+      <div>
+        <h2>San Francisco</h2>
+        <p>Temperature: {weather.temp}°F</p>
+        <p>Condition: {weather.condition}</p>
+      </div>
+    );
+  })();
+
+  return ui.value;
+}
+```
+
+### Progressive updates
+
+```typescript
+import { createStreamableUI } from 'ai/rsc';
+
+export async function generateStory() {
+  const ui = createStreamableUI(<div>Starting...</div>);
+
+  (async () => {
+    ui.update(<div>Generating outline...</div>);
+    await delay(1000);
+    
+    ui.update(<div>Writing chapter 1...</div>);
+    await delay(1000);
+    
+    ui.update(<div>Writing chapter 2...</div>);
+    await delay(1000);
+    
+    ui.done(<div>Story complete!</div>);
+  })();
+
+  return ui.value;
+}
+```
+
+### Appending nodes
+
+```typescript
+import { createStreamableUI } from 'ai/rsc';
+
+export async function generateList() {
+  const ui = createStreamableUI(<div>Items:</div>);
+
+  (async () => {
+    const items = await fetchItems();
+    
+    for (const item of items) {
+      ui.append(<div key={item.id}>{item.name}</div>);
+      await delay(100);
+    }
+    
+    ui.done();
+  })();
+
+  return ui.value;
+}
+```
+
+### Error handling
+
+```typescript
+import { createStreamableUI } from 'ai/rsc';
+
+export async function fetchData() {
+  const ui = createStreamableUI(<div>Loading...</div>);
+
+  (async () => {
+    try {
+      const data = await fetchSomeData();
+      ui.done(<div>Data: {JSON.stringify(data)}</div>);
+    } catch (error) {
+      ui.error(error);
+    }
+  })();
+
+  return ui.value;
+}
+```
+
+### Streaming with LLM
+
+```typescript
+import { createStreamableUI } from 'ai/rsc';
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+export async function generateResponse(prompt: string) {
+  const ui = createStreamableUI(<div>Thinking...</div>);
+
+  (async () => {
+    const result = streamText({
+      model: openai('gpt-4-turbo'),
+      prompt,
+    });
+
+    let fullText = '';
+    for await (const textPart of result.textStream) {
+      fullText += textPart;
+      ui.update(<div>{fullText}</div>);
+    }
+
+    ui.done();
+  })();
+
+  return ui.value;
+}
+```
+
+### Complex progressive rendering
+
+```typescript
+import { createStreamableUI } from 'ai/rsc';
+
+export async function analyzeDocument() {
+  const ui = createStreamableUI(
+    <div className="analysis">
+      <h2>Analyzing document...</h2>
+    </div>
+  );
+
+  (async () => {
+    // Step 1: Extract text
+    ui.update(
+      <div className="analysis">
+        <h2>Extracting text...</h2>
+        <progress value={33} max={100} />
+      </div>
+    );
+    const text = await extractText();
+
+    // Step 2: Analyze sentiment
+    ui.update(
+      <div className="analysis">
+        <h2>Analyzing sentiment...</h2>
+        <progress value={66} max={100} />
+      </div>
+    );
+    const sentiment = await analyzeSentiment(text);
+
+    // Step 3: Generate summary
+    ui.update(
+      <div className="analysis">
+        <h2>Generating summary...</h2>
+        <progress value={90} max={100} />
+      </div>
+    );
+    const summary = await generateSummary(text);
+
+    // Final result
+    ui.done(
+      <div className="analysis-result">
+        <h2>Analysis Complete</h2>
+        <div className="sentiment">
+          <strong>Sentiment:</strong> {sentiment}
+        </div>
+        <div className="summary">
+          <strong>Summary:</strong>
+          <p>{summary}</p>
+        </div>
+      </div>
+    );
+  })();
+
+  return ui.value;
+}
+```
+
+## Important Notes
+
+<Warning>
+  You must always call `.done()` on the streamable UI, otherwise the client will remain in a loading state indefinitely.
+</Warning>
+
+<Note>
+  The streamable UI must be used within a Server Action or Server Component context in Next.js.
+</Note>
+
+<Note>
+  If you don't call `.done()` within a reasonable time (default: 3 seconds in development), you'll see a warning in the console.
+</Note>

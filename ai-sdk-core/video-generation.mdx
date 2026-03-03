@@ -1,0 +1,213 @@
+---
+title: Video Generation
+description: Learn how to generate videos with the AI SDK.
+---
+
+# Video Generation
+
+<Note>
+  Video generation is an experimental feature. The API may change in future
+  versions.
+</Note>
+
+The AI SDK provides the [`experimental_generateVideo`](/docs/reference/ai-sdk-core/generate-video)
+function to generate videos based on a given prompt using a video model.
+
+```tsx
+import { experimental_generateVideo as generateVideo } from 'ai';
+import { fal } from '@ai-sdk/fal';
+
+const { video } = await generateVideo({
+  model: fal.video('luma-dream-machine/ray-2'),
+  prompt: 'A cat walking on a treadmill',
+});
+```
+
+You can access the video data using the `base64` or `uint8Array` properties:
+
+```tsx
+const base64 = video.base64; // base64 video data
+const uint8Array = video.uint8Array; // Uint8Array video data
+```
+
+## Settings
+
+### Aspect Ratio
+
+The aspect ratio is specified as a string in the format `{width}:{height}`.
+Models only support a few aspect ratios, and the supported aspect ratios are different for each model and provider.
+
+```tsx highlight={"7"}
+import { experimental_generateVideo as generateVideo } from 'ai';
+import { fal } from '@ai-sdk/fal';
+
+const { video } = await generateVideo({
+  model: fal.video('luma-dream-machine/ray-2'),
+  prompt: 'A cat walking on a treadmill',
+  aspectRatio: '16:9',
+});
+```
+
+### Resolution
+
+The resolution is specified as a string in the format `{width}x{height}`.
+Models only support specific resolutions, and the supported resolutions are different for each model and provider.
+
+```tsx highlight={"7"}
+import { experimental_generateVideo as generateVideo } from 'ai';
+import { google } from '@ai-sdk/google';
+
+const { video } = await generateVideo({
+  model: google.video('veo-2.0-generate-001'),
+  prompt: 'A serene mountain landscape at sunset',
+  resolution: '1280x720',
+});
+```
+
+### Duration
+
+Some video models support specifying the duration of the generated video in seconds.
+
+```tsx highlight={"7"}
+import { experimental_generateVideo as generateVideo } from 'ai';
+import { fal } from '@ai-sdk/fal';
+
+const { video } = await generateVideo({
+  model: fal.video('luma-dream-machine/ray-2'),
+  prompt: 'A timelapse of clouds moving across the sky',
+  duration: 5,
+});
+```
+
+### Frames Per Second (FPS)
+
+Some video models allow you to specify the frames per second for the generated video.
+
+```tsx highlight={"7"}
+import { experimental_generateVideo as generateVideo } from 'ai';
+import { fal } from '@ai-sdk/fal';
+
+const { video } = await generateVideo({
+  model: fal.video('luma-dream-machine/ray-2'),
+  prompt: 'A hummingbird in slow motion',
+  fps: 24,
+});
+```
+
+### Generating Multiple Videos
+
+`experimental_generateVideo` supports generating multiple videos at once:
+
+```tsx highlight={"7"}
+import { experimental_generateVideo as generateVideo } from 'ai';
+import { fal } from '@ai-sdk/fal';
+
+const { videos } = await generateVideo({
+  model: fal.video('luma-dream-machine/ray-2'),
+  prompt: 'A cat walking on a treadmill',
+  n: 2, // number of videos to generate
+});
+```
+
+<Note>
+  `experimental_generateVideo` will automatically call the model as often as
+  needed (in parallel) to generate the requested number of videos.
+</Note>
+
+### Provider Options
+
+Video model settings can be configured using `providerOptions` for provider-specific parameters:
+
+```tsx highlight={"7-11"}
+import { experimental_generateVideo as generateVideo } from 'ai';
+import { fal } from '@ai-sdk/fal';
+
+const { video } = await generateVideo({
+  model: fal.video('luma-dream-machine/ray-2'),
+  prompt: 'A cat walking on a treadmill',
+  providerOptions: {
+    fal: {
+      loop: true, // provider-specific option
+    },
+  },
+});
+```
+
+## Response Information
+
+The `experimental_generateVideo` function returns comprehensive response information:
+
+```tsx highlight={"6"}
+import { experimental_generateVideo as generateVideo } from 'ai';
+import { fal } from '@ai-sdk/fal';
+
+const result = await generateVideo({
+  model: fal.video('luma-dream-machine/ray-2'),
+  prompt: 'A cat walking on a treadmill',
+});
+
+console.log(result.videos); // Array of generated videos
+console.log(result.warnings); // Any warnings from the provider
+console.log(result.responses); // Raw provider responses
+console.log(result.providerMetadata); // Provider-specific metadata
+```
+
+## Retries
+
+The `experimental_generateVideo` function accepts an optional `maxRetries` parameter
+that you can use to set the maximum number of retries.
+It defaults to `2` retries (3 attempts in total). You can set it to `0` to disable retries.
+
+```tsx highlight={"7"}
+import { experimental_generateVideo as generateVideo } from 'ai';
+import { fal } from '@ai-sdk/fal';
+
+const { video } = await generateVideo({
+  model: fal.video('luma-dream-machine/ray-2'),
+  prompt: 'A cat walking on a treadmill',
+  maxRetries: 0, // Disable retries
+});
+```
+
+## Abort Signals and Timeouts
+
+The `experimental_generateVideo` function accepts an optional `abortSignal` parameter of
+type [`AbortSignal`](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal)
+that you can use to abort the generation process or set a timeout.
+
+```tsx highlight={"7"}
+import { experimental_generateVideo as generateVideo } from 'ai';
+import { fal } from '@ai-sdk/fal';
+
+const { video } = await generateVideo({
+  model: fal.video('luma-dream-machine/ray-2'),
+  prompt: 'A cat walking on a treadmill',
+  abortSignal: AbortSignal.timeout(60000), // Abort after 60 seconds
+});
+```
+
+## Custom Headers
+
+The `experimental_generateVideo` function accepts an optional `headers` parameter
+that you can use to add custom headers to the request.
+
+```tsx highlight={"7"}
+import { experimental_generateVideo as generateVideo } from 'ai';
+import { fal } from '@ai-sdk/fal';
+
+const { video } = await generateVideo({
+  model: fal.video('luma-dream-machine/ray-2'),
+  prompt: 'A cat walking on a treadmill',
+  headers: { 'X-Custom-Header': 'custom-value' },
+});
+```
+
+## Video Providers & Models
+
+Several providers offer video generation models:
+
+| Provider                                                                | Model                         |
+| ----------------------------------------------------------------------- | ----------------------------- |
+| [fal.ai](/providers/ai-sdk-providers/fal#video-models)                  | `luma-dream-machine/ray-2`    |
+| [fal.ai](/providers/ai-sdk-providers/fal#video-models)                  | `runway-gen3/turbo/image-to-video` |
+| [Google](/providers/ai-sdk-providers/google#video-models)               | `veo-2.0-generate-001`        |

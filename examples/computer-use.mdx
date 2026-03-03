@@ -1,0 +1,364 @@
+---
+title: Computer Use with Claude
+description: Learn how to implement Claude's Computer Use capabilities with the AI SDK
+---
+
+# Computer Use with Claude
+
+Learn how to integrate Claude's Computer Use capabilities into your AI SDK applications, enabling AI to interact with computer interfaces.
+
+## What is Computer Use?
+
+Computer Use enables AI models to interact with computers like humans do:
+
+- Moving the cursor
+- Clicking buttons
+- Typing text
+- Taking screenshots
+- Reading screen content
+
+This opens up possibilities for automating complex tasks while leveraging Claude's reasoning abilities.
+
+## Prerequisites
+
+- Node.js 18+
+- Anthropic API key or Vercel AI Gateway access
+- A controlled environment for execution (VM or container recommended)
+- Understanding of AI safety considerations
+
+## Safety First
+
+Computer Use is a beta feature with important safety considerations:
+
+- Use a dedicated virtual machine or container
+- Limit access to sensitive data
+- Implement human oversight for critical actions
+- Restrict internet access to allowlisted domains
+- Start with low-risk tasks
+
+## Installation
+
+```bash
+pnpm add ai @ai-sdk/anthropic
+```
+
+## How It Works
+
+1. **Provide tools**: Define Computer Use tools (computer, bash, text editor)
+2. **Model selects tool**: Claude determines which tool to use
+3. **Execute action**: Your code runs the tool (screenshot, click, etc.)
+4. **Return results**: Results are sent back to Claude
+5. **Iterate**: Claude continues until task is complete
+
+## Available Tools
+
+### Computer Tool
+
+Enables mouse and keyboard control:
+
+```ts
+import { anthropic } from '@ai-sdk/anthropic';
+
+const computerTool = anthropic.tools.computer_20250124({
+  displayWidthPx: 1920,
+  displayHeightPx: 1080,
+  execute: async ({ action, coordinate, text }) => {
+    switch (action) {
+      case 'screenshot': {
+        return {
+          type: 'image',
+          data: await getScreenshot(), // Your implementation
+        };
+      }
+      case 'mouse_move':
+      case 'left_click':
+      case 'right_click':
+      case 'middle_click':
+      case 'double_click':
+      case 'type':
+      case 'key':
+      case 'cursor_position': {
+        return await executeComputerAction(action, coordinate, text);
+      }
+    }
+  },
+  toModelOutput({ output }) {
+    return typeof output === 'string'
+      ? [{ type: 'text', text: output }]
+      : [{ type: 'image', data: output.data, mediaType: 'image/png' }];
+  },
+});
+```
+
+### Bash Tool
+
+Executes shell commands:
+
+```ts
+const bashTool = anthropic.tools.bash_20250124({
+  execute: async ({ command, restart }) => {
+    // Your implementation
+    return execSync(command).toString();
+  },
+});
+```
+
+### Text Editor Tool
+
+Handles file operations:
+
+```ts
+const textEditorTool = anthropic.tools.textEditor_20250124({
+  execute: async ({
+    command,
+    path,
+    file_text,
+    insert_line,
+    new_str,
+    insert_text,
+    old_str,
+    view_range,
+  }) => {
+    // Your implementation
+    return executeTextEditorFunction({
+      command,
+      path,
+      fileText: file_text,
+      insertLine: insert_line,
+      newStr: new_str,
+      insertText: insert_text,
+      oldStr: old_str,
+      viewRange: view_range,
+    });
+  },
+});
+```
+
+## Basic Example
+
+### One-Shot Generation
+
+```ts
+import { generateText } from 'ai';
+import { anthropic } from '@ai-sdk/anthropic';
+
+const result = await generateText({
+  model: 'anthropic/claude-sonnet-4-20250514',
+  prompt: 'Move the cursor to the center of the screen and take a screenshot',
+  tools: { computer: computerTool },
+});
+
+console.log(result.text);
+```
+
+### Streaming Generation
+
+```ts
+import { streamText } from 'ai';
+
+const result = streamText({
+  model: 'anthropic/claude-sonnet-4-20250514',
+  prompt: 'Open the browser and navigate to vercel.com',
+  tools: { computer: computerTool },
+});
+
+for await (const chunk of result.textStream) {
+  console.log(chunk);
+}
+```
+
+## Multi-Step (Agentic) Usage
+
+Enable autonomous multi-step execution:
+
+```ts
+import { streamText, stepCountIs } from 'ai';
+
+const result = streamText({
+  model: 'anthropic/claude-sonnet-4-20250514',
+  prompt: 'Find the search bar, search for "AI SDK", and take a screenshot of the results',
+  tools: { computer: computerTool },
+  stopWhen: stepCountIs(10), // Allow up to 10 steps
+});
+```
+
+The `stopWhen` parameter allows Claude to:
+
+1. Take a screenshot to see the screen
+2. Move the cursor to the search bar
+3. Click the search bar
+4. Type the search query
+5. Press Enter
+6. Wait for results to load
+7. Take a final screenshot
+8. Respond with findings
+
+## Combining Multiple Tools
+
+Use all three tools together for complex workflows:
+
+```ts
+import { generateText } from 'ai';
+import { anthropic } from '@ai-sdk/anthropic';
+
+const result = await generateText({
+  model: 'anthropic/claude-sonnet-4-20250514',
+  prompt: `Create a file called example.txt, write 'Hello World' to it, 
+           and run 'cat example.txt' to verify`,
+  tools: {
+    computer: computerTool,
+    bash: bashTool,
+    str_replace_editor: textEditorTool,
+  },
+  stopWhen: stepCountIs(15),
+});
+
+console.log(result.text);
+```
+
+## Implementation Example
+
+Here's a more complete implementation:
+
+```ts filename="lib/computer-use.ts"
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import screenshot from 'screenshot-desktop';
+
+const execAsync = promisify(exec);
+
+export async function getScreenshot(): Promise<string> {
+  const img = await screenshot();
+  return img.toString('base64');
+}
+
+export async function executeComputerAction(
+  action: string,
+  coordinate?: [number, number],
+  text?: string,
+): Promise<string> {
+  switch (action) {
+    case 'mouse_move':
+      if (!coordinate) throw new Error('Coordinate required');
+      // Use your preferred automation library (e.g., robotjs, nut.js)
+      await moveMouse(coordinate[0], coordinate[1]);
+      return 'Mouse moved';
+
+    case 'left_click':
+      await click('left');
+      return 'Left click executed';
+
+    case 'type':
+      if (!text) throw new Error('Text required');
+      await typeText(text);
+      return 'Text typed';
+
+    // Implement other actions...
+    default:
+      throw new Error(`Unknown action: ${action}`);
+  }
+}
+```
+
+## Best Practices
+
+### Clear Instructions
+
+```ts
+const result = await generateText({
+  model: 'anthropic/claude-sonnet-4-20250514',
+  prompt: `
+    1. Take a screenshot to see the current state
+    2. Find the blue "Submit" button
+    3. Click it
+    4. Wait 2 seconds
+    5. Take another screenshot to verify
+  `,
+  tools: { computer: computerTool },
+});
+```
+
+### Verify Actions with Screenshots
+
+```ts
+prompt: `After each action, take a screenshot to verify it worked correctly`
+```
+
+### Use Keyboard Shortcuts
+
+```ts
+prompt: `Use Cmd+C to copy instead of right-clicking the context menu`
+```
+
+### Provide Context
+
+```ts
+system: `You are automating a checkout process. 
+The "Checkout" button is typically in the top-right corner.
+Wait for page loads before taking actions.`
+```
+
+## Next.js Integration
+
+For a complete Next.js example:
+
+```ts filename="app/api/computer-use/route.ts"
+import { streamText, stepCountIs } from 'ai';
+import { anthropic } from '@ai-sdk/anthropic';
+import { computerTool } from '@/lib/computer-tools';
+
+export async function POST(req: Request) {
+  const { prompt } = await req.json();
+
+  const result = streamText({
+    model: 'anthropic/claude-sonnet-4-20250514',
+    prompt,
+    tools: { computer: computerTool },
+    stopWhen: stepCountIs(20),
+  });
+
+  return result.toUIMessageStreamResponse();
+}
+```
+
+## Security Checklist
+
+- [ ] Running in isolated container/VM
+- [ ] No access to production databases
+- [ ] No access to credentials or secrets
+- [ ] Internet access restricted to allowlist
+- [ ] Human approval for critical actions
+- [ ] Logging all computer actions
+- [ ] Rate limiting enabled
+- [ ] Automatic timeout after inactivity
+
+## Limitations
+
+Be aware of current limitations:
+
+- May struggle with complex UI interactions
+- Can be slow for multi-step tasks
+- Screenshot quality affects performance
+- Some actions may fail and require retry logic
+- Best for structured, repeatable tasks
+
+## Example Use Cases
+
+1. **Browser Automation**: Navigate websites and extract information
+2. **Testing**: Automated UI testing of web applications
+3. **Data Entry**: Fill forms based on structured data
+4. **Documentation**: Generate screenshots for guides
+5. **Monitoring**: Check application states periodically
+
+## Next Steps
+
+- Review [Anthropic's reference implementation](https://github.com/anthropics/anthropic-quickstarts/tree/main/computer-use-demo)
+- Check out the [AI SDK Computer Use Template](https://github.com/vercel-labs/ai-sdk-computer-use)
+- Read about [multi-modal tool results](/docs/foundations/prompts#multi-modal-tool-results)
+- Learn about [multi-step calls](/docs/ai-sdk-core/tools-and-tool-calling#multi-step-calls)
+
+## Resources
+
+- [Anthropic Computer Use documentation](https://docs.anthropic.com/en/docs/build-with-claude/computer-use)
+- [AI SDK Tools documentation](/docs/foundations/tools)
+- [Anthropic provider documentation](/providers/ai-sdk-providers/anthropic)

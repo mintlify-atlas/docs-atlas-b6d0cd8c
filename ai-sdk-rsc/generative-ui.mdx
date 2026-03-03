@@ -1,0 +1,442 @@
+---
+title: Generative UI
+description: Build dynamic user interfaces that adapt to AI model outputs and tool calls
+---
+
+# Generative UI
+
+Generative UI allows you to create dynamic interfaces that change based on AI model outputs and tool calls. Instead of displaying raw text or JSON, you can render custom React components that provide rich, interactive experiences.
+
+## Basic Concept
+
+Generative UI maps AI model outputs to React components:
+
+```tsx
+const result = await streamUI({
+  model: openai('gpt-4'),
+  prompt: 'What is the weather in San Francisco?',
+  tools: {
+    getWeather: {
+      description: 'Get current weather',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      generate: async ({ location }) => {
+        const weather = await fetchWeather(location);
+        return <WeatherCard {...weather} />;
+      },
+    },
+  },
+});
+```
+
+## State Management with createAI
+
+`createAI` provides a context provider for managing AI and UI state across your application.
+
+### Setting Up the Provider
+
+```tsx file="app/ai-provider.tsx"
+'use server';
+
+import { createAI } from '@ai-sdk/rsc';
+import { continueConversation } from './actions';
+
+export type AIState = Array<{
+  role: 'user' | 'assistant';
+  content: string;
+}>;
+
+export type UIState = Array<{
+  id: string;
+  component: React.ReactNode;
+}>;
+
+export const AI = createAI({
+  actions: {
+    continueConversation,
+  },
+  initialAIState: [] as AIState,
+  initialUIState: [] as UIState,
+});
+```
+
+### Using the Provider
+
+```tsx file="app/layout.tsx"
+import { AI } from './ai-provider';
+
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>
+        <AI>{children}</AI>
+      </body>
+    </html>
+  );
+}
+```
+
+### Accessing State
+
+```tsx file="app/page.tsx"
+'use client';
+
+import { useUIState, useActions } from '@ai-sdk/rsc';
+
+export default function Chat() {
+  const [messages, setMessages] = useUIState();
+  const { continueConversation } = useActions();
+
+  const handleSubmit = async (input: string) => {
+    const response = await continueConversation(input);
+    setMessages([...messages, response]);
+  };
+
+  return (
+    <div>
+      {messages.map((msg) => (
+        <div key={msg.id}>{msg.component}</div>
+      ))}
+    </div>
+  );
+}
+```
+
+## Advanced Tool Patterns
+
+### Multi-Step Tool Execution
+
+Use generators to show progress during tool execution:
+
+```tsx
+tools: {
+  analyzeData: {
+    description: 'Analyze a dataset',
+    inputSchema: z.object({
+      datasetId: z.string(),
+    }),
+    generate: async function* ({ datasetId }) {
+      // Step 1: Loading
+      yield <div>Loading dataset {datasetId}...</div>;
+      
+      const data = await loadDataset(datasetId);
+      
+      // Step 2: Processing
+      yield (
+        <div>
+          <p>Loaded {data.rows.length} rows</p>
+          <p>Analyzing...</p>
+        </div>
+      );
+      
+      const analysis = await analyzeData(data);
+      
+      // Step 3: Complete
+      return (
+        <AnalysisResults
+          summary={analysis.summary}
+          charts={analysis.charts}
+          insights={analysis.insights}
+        />
+      );
+    },
+  },
+}
+```
+
+### Conditional UI Generation
+
+Render different components based on tool parameters:
+
+```tsx
+tools: {
+  displayData: {
+    description: 'Display data in different formats',
+    inputSchema: z.object({
+      data: z.array(z.any()),
+      format: z.enum(['table', 'chart', 'list']),
+    }),
+    generate: async ({ data, format }) => {
+      switch (format) {
+        case 'table':
+          return <DataTable data={data} />;
+        case 'chart':
+          return <DataChart data={data} />;
+        case 'list':
+          return <DataList data={data} />;
+      }
+    },
+  },
+}
+```
+
+### Interactive Components
+
+Generate components with client-side interactivity:
+
+```tsx
+tools: {
+  createPoll: {
+    description: 'Create an interactive poll',
+    inputSchema: z.object({
+      question: z.string(),
+      options: z.array(z.string()),
+    }),
+    generate: async ({ question, options }) => {
+      return (
+        <InteractivePoll
+          question={question}
+          options={options}
+          onVote={(option) => {
+            // Handle vote
+          }}
+        />
+      );
+    },
+  },
+}
+```
+
+## Managing AI State
+
+### Reading AI State
+
+```tsx file="app/actions.tsx"
+'use server';
+
+import { getAIState } from '@ai-sdk/rsc';
+
+export async function continueConversation(input: string) {
+  const history = getAIState();
+  
+  // Use history in your prompt
+  const result = await streamUI({
+    model: openai('gpt-4'),
+    messages: [
+      ...history,
+      { role: 'user', content: input },
+    ],
+  });
+  
+  return result.value;
+}
+```
+
+### Updating AI State
+
+```tsx file="app/actions.tsx"
+'use server';
+
+import { getMutableAIState } from '@ai-sdk/rsc';
+
+export async function continueConversation(input: string) {
+  const state = getMutableAIState();
+  
+  // Update state
+  state.update([
+    ...state.get(),
+    { role: 'user', content: input },
+  ]);
+  
+  const result = await streamUI({
+    model: openai('gpt-4'),
+    prompt: input,
+  });
+  
+  // Finalize state
+  state.done([
+    ...state.get(),
+    { role: 'assistant', content: result.text },
+  ]);
+  
+  return result.value;
+}
+```
+
+### Persisting State
+
+Use callbacks to persist state to a database:
+
+```tsx file="app/ai-provider.tsx"
+export const AI = createAI({
+  actions: { continueConversation },
+  initialAIState: [],
+  initialUIState: [],
+  onSetAIState: async ({ state, done }) => {
+    'use server';
+    
+    if (done) {
+      // Save to database when conversation is complete
+      await saveConversation(state);
+    }
+  },
+  onGetUIState: async () => {
+    'use server';
+    
+    // Load conversation from database
+    const conversation = await loadConversation();
+    
+    // Convert to UI state
+    return conversation.map((msg) => ({
+      id: msg.id,
+      component: <Message {...msg} />,
+    }));
+  },
+});
+```
+
+## Component Patterns
+
+### Skeleton Loading States
+
+```tsx
+generate: async function* ({ query }) {
+  yield <ResultsSkeleton count={5} />;
+  
+  const results = await search(query);
+  
+  return <ResultsList results={results} />;
+}
+```
+
+### Incremental Rendering
+
+```tsx
+generate: async function* ({ items }) {
+  for (const item of items) {
+    const processed = await processItem(item);
+    yield <ProcessedItem data={processed} />;
+  }
+  
+  return <CompletionMessage />;
+}
+```
+
+### Error Recovery
+
+```tsx
+generate: async function* ({ action }) {
+  try {
+    yield <div>Processing {action}...</div>;
+    const result = await performAction(action);
+    return <Success data={result} />;
+  } catch (error) {
+    return (
+      <ErrorCard
+        message={error.message}
+        retry={() => performAction(action)}
+      />
+    );
+  }
+}
+```
+
+## Routing Components
+
+Route to different UIs based on model decisions:
+
+```tsx
+tools: {
+  showContent: {
+    description: 'Display content in the appropriate format',
+    inputSchema: z.object({
+      type: z.enum(['article', 'video', 'image', 'code']),
+      content: z.any(),
+    }),
+    generate: async ({ type, content }) => {
+      const components = {
+        article: <Article content={content} />,
+        video: <VideoPlayer url={content.url} />,
+        image: <ImageGallery images={content.images} />,
+        code: <CodeBlock code={content.code} language={content.language} />,
+      };
+      
+      return components[type];
+    },
+  },
+}
+```
+
+## Best Practices
+
+### 1. Type Safety
+
+```tsx
+import { z } from 'zod';
+
+const weatherSchema = z.object({
+  location: z.string(),
+  units: z.enum(['celsius', 'fahrenheit']).default('celsius'),
+});
+
+tools: {
+  getWeather: {
+    inputSchema: weatherSchema,
+    generate: async (params) => {
+      // params is fully typed
+      const weather = await fetchWeather(params.location, params.units);
+      return <WeatherCard {...weather} />;
+    },
+  },
+}
+```
+
+### 2. Component Reusability
+
+```tsx
+// Shared component
+function DataVisualization({ data, type }) {
+  return type === 'chart' ? <Chart data={data} /> : <Table data={data} />;
+}
+
+// Use in multiple tools
+tools: {
+  analyzeData: {
+    generate: async ({ data }) => {
+      const analysis = await analyze(data);
+      return <DataVisualization data={analysis} type="chart" />;
+    },
+  },
+  showData: {
+    generate: async ({ data }) => {
+      return <DataVisualization data={data} type="table" />;
+    },
+  },
+}
+```
+
+### 3. Progressive Disclosure
+
+```tsx
+generate: async function* ({ topic }) {
+  // Show summary first
+  const summary = await generateSummary(topic);
+  yield <Summary text={summary} />;
+  
+  // Then show details
+  const details = await generateDetails(topic);
+  yield (
+    <>
+      <Summary text={summary} />
+      <Details content={details} />
+    </>
+  );
+  
+  // Finally show related content
+  const related = await findRelated(topic);
+  return (
+    <>
+      <Summary text={summary} />
+      <Details content={details} />
+      <RelatedContent items={related} />
+    </>
+  );
+}
+```
+
+## Next Steps
+
+- Review the [`streamUI` API reference](/docs/reference/ai-sdk-rsc/stream-ui)
+- Learn about [`createAI` configuration](/docs/reference/ai-sdk-rsc/create-ai)
+- Explore [troubleshooting](/docs/troubleshooting/common-issues) common issues

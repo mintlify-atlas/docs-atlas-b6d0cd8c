@@ -1,0 +1,240 @@
+---
+title: Mistral AI Provider
+description: Learn how to use Mistral AI models for text generation and embeddings with the AI SDK.
+---
+
+# Mistral AI Provider
+
+The Mistral AI provider enables you to use Mistral's language models for text generation, function calling, and embeddings.
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @ai-sdk/mistral
+```
+
+```bash pnpm
+pnpm add @ai-sdk/mistral
+```
+
+```bash yarn
+yarn add @ai-sdk/mistral
+```
+
+```bash bun
+bun add @ai-sdk/mistral
+```
+</CodeGroup>
+
+## Setup
+
+Get your API key from [Mistral AI Console](https://console.mistral.ai/) and set it as an environment variable:
+
+```bash
+MISTRAL_API_KEY=your-api-key
+```
+
+## Usage
+
+### Basic Text Generation
+
+```typescript
+import { mistral } from '@ai-sdk/mistral';
+import { generateText } from 'ai';
+
+const { text } = await generateText({
+  model: mistral('mistral-large-latest'),
+  prompt: 'Explain quantum computing.',
+});
+```
+
+### Streaming Responses
+
+```typescript
+import { mistral } from '@ai-sdk/mistral';
+import { streamText } from 'ai';
+
+const result = streamText({
+  model: mistral('mistral-large-latest'),
+  prompt: 'Write about machine learning.',
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### Structured Output
+
+```typescript
+import { mistral } from '@ai-sdk/mistral';
+import { generateObject } from 'ai';
+import { z } from 'zod';
+
+const { object } = await generateObject({
+  model: mistral('mistral-large-latest'),
+  schema: z.object({
+    topics: z.array(z.string()),
+    difficulty: z.enum(['beginner', 'intermediate', 'advanced']),
+  }),
+  prompt: 'Categorize this content.',
+});
+```
+
+## Configuration
+
+### Custom Provider Instance
+
+```typescript
+import { createMistral } from '@ai-sdk/mistral';
+
+const mistral = createMistral({
+  apiKey: process.env.MISTRAL_API_KEY,
+  baseURL: 'https://api.mistral.ai/v1',
+});
+```
+
+### Provider Options
+
+- **apiKey**: Your Mistral API key (defaults to `MISTRAL_API_KEY` env var)
+- **baseURL**: Custom API endpoint URL
+- **headers**: Custom headers for requests
+
+## Available Models
+
+### Text Models
+
+- `mistral-large-latest` - Most capable model
+- `mistral-medium-latest` - Balanced performance
+- `mistral-small-latest` - Fast and efficient
+- `pixtral-large-latest` - Multimodal model with vision
+
+### Reasoning Models
+
+- `magistral-small-2507` - Reasoning model
+- `magistral-medium-2507` - Advanced reasoning
+
+## Advanced Features
+
+### Tool Calling
+
+```typescript
+import { mistral } from '@ai-sdk/mistral';
+import { generateText } from 'ai';
+import { z } from 'zod';
+
+const result = await generateText({
+  model: mistral('mistral-large-latest'),
+  tools: {
+    get_weather: {
+      description: 'Get weather information',
+      parameters: z.object({
+        city: z.string(),
+      }),
+      execute: async ({ city }) => {
+        return { temperature: 72, condition: 'sunny' };
+      },
+    },
+  },
+  prompt: 'What is the weather in Paris?',
+});
+```
+
+### Vision (Pixtral)
+
+```typescript
+import { mistral } from '@ai-sdk/mistral';
+import { generateText } from 'ai';
+import fs from 'fs';
+
+const result = await generateText({
+  model: mistral('pixtral-large-latest'),
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'What is in this image?' },
+        { type: 'image', image: fs.readFileSync('./image.jpg') },
+      ],
+    },
+  ],
+});
+```
+
+### PDF Support
+
+```typescript
+import { mistral } from '@ai-sdk/mistral';
+import { generateText } from 'ai';
+import fs from 'fs';
+
+const result = await generateText({
+  model: mistral('mistral-small-latest'),
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Summarize this PDF.' },
+        {
+          type: 'file',
+          data: fs.readFileSync('./document.pdf'),
+          mediaType: 'application/pdf',
+        },
+      ],
+    },
+  ],
+  providerOptions: {
+    mistral: {
+      documentImageLimit: 8,
+      documentPageLimit: 64,
+    },
+  },
+});
+```
+
+### Reasoning Models
+
+```typescript
+import { mistral } from '@ai-sdk/mistral';
+import { generateText } from 'ai';
+
+const { text, reasoningText } = await generateText({
+  model: mistral('magistral-small-2507'),
+  prompt: 'What is 15 * 24?',
+});
+
+console.log('Reasoning:', reasoningText);
+console.log('Answer:', text);
+```
+
+### Embeddings
+
+```typescript
+import { mistral } from '@ai-sdk/mistral';
+import { embed } from 'ai';
+
+const { embedding } = await embed({
+  model: mistral.embedding('mistral-embed'),
+  value: 'Text to embed',
+});
+```
+
+**Available Models:**
+- `mistral-embed` (1024 dimensions)
+
+## Model Capabilities
+
+| Model | Vision | Tools | Structured Output |
+|-------|--------|-------|-------------------|
+| mistral-large-latest | ✗ | ✓ | ✓ |
+| mistral-medium-latest | ✗ | ✓ | ✓ |
+| mistral-small-latest | ✗ | ✓ | ✓ |
+| pixtral-large-latest | ✓ | ✓ | ✓ |
+| magistral-small-2507 | ✗ | ✓ | ✓ |
+
+## Resources
+
+- [Mistral AI Documentation](https://docs.mistral.ai/)
+- [AI SDK Documentation](/docs)
+- [Mistral API Reference](https://docs.mistral.ai/api/)

@@ -1,0 +1,496 @@
+---
+title: Generating Structured Data
+description: Learn how to generate type-safe structured data with schemas and validation.
+---
+
+# Generating Structured Data
+
+While text generation is useful, many applications need structured, typed data. The AI SDK Core provides built-in support for generating schema-validated structured data through the `output` property on `generateText` and `streamText`.
+
+## Why Structured Data?
+
+Structured data generation is essential for:
+
+- **Data extraction**: Extract information from unstructured text
+- **Classification**: Categorize content into predefined types
+- **Synthetic data**: Generate test data or examples
+- **Form filling**: Generate structured responses for forms
+- **API responses**: Create typed data for downstream systems
+
+## Basic Usage
+
+Use `Output.object()` with a schema to generate structured data:
+
+```typescript
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  output: Output.object({
+    schema: z.object({
+      recipe: z.object({
+        name: z.string(),
+        ingredients: z.array(
+          z.object({ 
+            name: z.string(), 
+            amount: z.string() 
+          })
+        ),
+        steps: z.array(z.string()),
+      }),
+    }),
+  }),
+  prompt: 'Generate a lasagna recipe.',
+});
+
+// output is fully typed and validated
+console.log(output.recipe.name);
+console.log(output.recipe.ingredients);
+```
+
+## Output Types
+
+The AI SDK supports multiple output formats through the `Output` object:
+
+### Output.object()
+
+Generate a structured object matching a schema:
+
+```typescript
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  output: Output.object({
+    schema: z.object({
+      name: z.string(),
+      age: z.number(),
+      email: z.string().email(),
+      interests: z.array(z.string()),
+    }),
+  }),
+  prompt: 'Generate a user profile for a software engineer.',
+});
+
+// Fully typed
+console.log(output.name);      // string
+console.log(output.age);       // number
+console.log(output.interests); // string[]
+```
+
+### Output.array()
+
+Generate an array of structured elements:
+
+```typescript
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  output: Output.array({
+    element: z.object({
+      city: z.string(),
+      temperature: z.number(),
+      condition: z.string(),
+    }),
+  }),
+  prompt: 'List weather for San Francisco, London, and Tokyo.',
+});
+
+// output is an array of weather objects
+for (const weather of output) {
+  console.log(`${weather.city}: ${weather.temperature}°F, ${weather.condition}`);
+}
+```
+
+#### Streaming Arrays
+
+When streaming arrays, use `elementStream` to receive complete elements as they're generated:
+
+```typescript
+import { streamText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const { elementStream } = streamText({
+  model: openai('gpt-5'),
+  output: Output.array({
+    element: z.object({
+      name: z.string(),
+      class: z.string(),
+      description: z.string(),
+    }),
+  }),
+  prompt: 'Generate 3 fantasy RPG characters.',
+});
+
+for await (const character of elementStream) {
+  console.log('Character:', character.name);
+  console.log('Class:', character.class);
+  console.log('Description:', character.description);
+  console.log('---');
+}
+```
+
+### Output.choice()
+
+Choose from a fixed set of options:
+
+```typescript
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  output: Output.choice({
+    options: ['positive', 'negative', 'neutral'],
+  }),
+  prompt: 'Classify the sentiment: "This product exceeded my expectations!"',
+});
+
+console.log(output); // 'positive' | 'negative' | 'neutral'
+```
+
+### Output.json()
+
+Generate arbitrary JSON without schema validation:
+
+```typescript
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  output: Output.json(),
+  prompt: 'Generate a JSON object with city weather data for multiple cities.',
+});
+
+// output is any valid JSON
+console.log(output);
+// {
+//   "San Francisco": { "temperature": 65, "condition": "Foggy" },
+//   "New York": { "temperature": 72, "condition": "Sunny" }
+// }
+```
+
+<Note>
+  `Output.json()` only validates that the response is valid JSON. For type safety, use `Output.object()` or `Output.array()`.
+</Note>
+
+### Output.text()
+
+Generate plain text (this is the default when no `output` is specified):
+
+```typescript
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  output: Output.text(),
+  prompt: 'Write a haiku about programming.',
+});
+
+console.log(output); // string
+```
+
+## Schema Definitions
+
+The AI SDK supports multiple schema libraries:
+
+### Zod Schemas
+
+```typescript
+import { z } from 'zod';
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  output: Output.object({
+    schema: z.object({
+      title: z.string(),
+      tags: z.array(z.string()),
+      published: z.boolean(),
+    }),
+  }),
+  prompt: 'Generate blog post metadata',
+});
+```
+
+### JSON Schema
+
+```typescript
+import { generateText, Output, jsonSchema } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  output: Output.object({
+    schema: jsonSchema({
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        age: { type: 'number' },
+      },
+      required: ['name', 'age'],
+    }),
+  }),
+  prompt: 'Generate a person profile',
+});
+```
+
+## Property Descriptions
+
+Add descriptions to schema properties to guide the model:
+
+```typescript
+import { z } from 'zod';
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  output: Output.object({
+    schema: z.object({
+      name: z.string().describe('The name of the recipe'),
+      servings: z.number().describe('Number of servings (1-12)'),
+      ingredients: z.array(
+        z.object({
+          name: z.string(),
+          amount: z.string().describe('Amount in grams or ml'),
+        })
+      ).describe('List of ingredients with amounts'),
+      steps: z.array(z.string()).describe('Step-by-step cooking instructions'),
+    }),
+  }),
+  prompt: 'Generate a pasta recipe for 4 people.',
+});
+```
+
+Descriptions help:
+- Clarify ambiguous property names
+- Specify expected formats
+- Provide context for nested structures
+
+## Output Name and Description
+
+Provide a name and description for the output to improve generation quality:
+
+```typescript
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  output: Output.object({
+    name: 'Recipe',
+    description: 'A complete recipe with ingredients and steps',
+    schema: z.object({
+      name: z.string(),
+      ingredients: z.array(z.object({ name: z.string(), amount: z.string() })),
+      steps: z.array(z.string()),
+    }),
+  }),
+  prompt: 'Generate a recipe for chocolate cake.',
+});
+```
+
+## Streaming Structured Data
+
+Stream structured data as it's generated using `streamText`:
+
+```typescript
+import { streamText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const { partialOutputStream } = streamText({
+  model: openai('gpt-5'),
+  output: Output.object({
+    schema: z.object({
+      recipe: z.object({
+        name: z.string(),
+        ingredients: z.array(
+          z.object({ name: z.string(), amount: z.string() })
+        ),
+        steps: z.array(z.string()),
+      }),
+    }),
+  }),
+  prompt: 'Generate a lasagna recipe.',
+});
+
+// Stream partial objects as they're built
+for await (const partialObject of partialOutputStream) {
+  console.log(partialObject);
+  // { recipe: { name: "Lasagna" } }
+  // { recipe: { name: "Lasagna", ingredients: [{ name: "pasta" }] } }
+  // ...
+}
+```
+
+<Note>
+  Partial outputs cannot be validated against the schema since they're incomplete. Validation happens on the final output.
+</Note>
+
+## Combining with Tools
+
+Structured output can be combined with tool calling:
+
+```typescript
+import { generateText, Output, tool, stepCountIs } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  tools: {
+    weather: tool({
+      description: 'Get weather for a location',
+      inputSchema: z.object({ location: z.string() }),
+      execute: async ({ location }) => {
+        return { temperature: 72, condition: 'sunny' };
+      },
+    }),
+  },
+  output: Output.object({
+    schema: z.object({
+      summary: z.string(),
+      recommendation: z.string(),
+    }),
+  }),
+  stopWhen: stepCountIs(5),
+  prompt: 'What should I wear in San Francisco today?',
+});
+
+console.log(output.summary);
+console.log(output.recommendation);
+```
+
+<Note>
+  Generating structured output counts as a step. Configure `stopWhen` to allow enough steps for both tool execution and output generation.
+</Note>
+
+## Error Handling
+
+When `generateText` cannot generate valid structured data, it throws `NoObjectGeneratedError`:
+
+```typescript
+import { generateText, Output, NoObjectGeneratedError } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+try {
+  const { output } = await generateText({
+    model: openai('gpt-5'),
+    output: Output.object({
+      schema: z.object({
+        name: z.string(),
+        age: z.number(),
+      }),
+    }),
+    prompt: 'Generate a person',
+  });
+} catch (error) {
+  if (NoObjectGeneratedError.isInstance(error)) {
+    console.log('Failed to generate object');
+    console.log('Cause:', error.cause);
+    console.log('Text:', error.text);
+    console.log('Usage:', error.usage);
+  }
+}
+```
+
+For streaming, use the `onError` callback:
+
+```typescript
+import { streamText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const result = streamText({
+  model: openai('gpt-5'),
+  output: Output.object({
+    schema: z.object({ name: z.string() }),
+  }),
+  prompt: 'Generate data',
+  onError({ error }) {
+    console.error('Stream error:', error);
+  },
+});
+```
+
+## Examples
+
+### Data Extraction
+
+```typescript
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  output: Output.object({
+    schema: z.object({
+      company: z.string(),
+      position: z.string(),
+      location: z.string(),
+      salary: z.string().optional(),
+      requirements: z.array(z.string()),
+    }),
+  }),
+  prompt: `Extract job posting details from:
+  
+  "We're hiring a Senior Software Engineer in San Francisco. 
+  Requirements: 5+ years experience, TypeScript, React. 
+  Competitive salary."`,
+});
+
+console.log(output);
+```
+
+### Content Classification
+
+```typescript
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  output: Output.object({
+    schema: z.object({
+      category: z.enum(['technology', 'business', 'health', 'entertainment']),
+      confidence: z.number().min(0).max(1),
+      keywords: z.array(z.string()),
+    }),
+  }),
+  prompt: 'Classify this article: "New AI model achieves breakthrough in natural language understanding"',
+});
+
+console.log(`Category: ${output.category}`);
+console.log(`Confidence: ${output.confidence}`);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Tool Calling" icon="wrench" href="/ai-sdk-core/tools-and-tool-calling">
+    Combine structured output with tools
+  </Card>
+  <Card title="Prompt Engineering" icon="wand-magic-sparkles" href="/ai-sdk-core/prompt-engineering">
+    Tips for better structured data generation
+  </Card>
+  <Card title="Settings" icon="sliders" href="/ai-sdk-core/settings">
+    Configure generation parameters
+  </Card>
+</CardGroup>

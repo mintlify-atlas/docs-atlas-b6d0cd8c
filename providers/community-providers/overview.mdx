@@ -1,0 +1,107 @@
+---
+title: Community Providers
+description: Learn about community-built providers for the AI SDK.
+---
+
+# Community Providers
+
+The AI SDK provides a [Language Model Specification](https://github.com/vercel/ai/tree/main/packages/provider/src/language-model/v2). You can [write your own provider](./custom-providers) that adheres to the specification and it will be compatible with the AI SDK.
+
+## What are Community Providers?
+
+Community providers are third-party implementations of the AI SDK provider interface that enable you to use additional AI services and platforms beyond the official SDK providers. These providers are built and maintained by the community, offering access to a wide variety of models and services.
+
+## Available Community Providers
+
+The AI SDK community has created providers for many popular AI platforms and services. Here are some notable examples:
+
+### AI Platforms
+
+- **Ollama** - Run large language models locally
+- **OpenRouter** - Access to multiple AI models through a single API
+- **Portkey** - AI gateway for model routing and fallbacks
+- **Cloudflare Workers AI** - Run AI models on Cloudflare's edge network
+
+### Specialized Providers
+
+- **Voyage AI** - High-quality embeddings
+- **Jina AI** - Multimodal embeddings and reranking
+- **Mixedbread** - Embeddings optimized for search
+- **LangDB** - Vector database integration
+
+### Regional Providers
+
+- **Zhipu AI** - Chinese language models
+- **Qwen** - Alibaba's multilingual models
+- **Minimax** - Chinese AI platform
+- **Sarvam** - Indian language models
+
+### Development Tools
+
+- **Browser AI** - Run models in the browser
+- **Llama.cpp** - High-performance local inference
+- **MCP Sampling** - Model Context Protocol support
+
+For a complete list of available community providers, see the [Community Provider Cards](#community-provider-cards) below.
+
+## Using Community Providers
+
+Most community providers follow a similar pattern to the official providers:
+
+```ts
+import { createProvider } from 'community-provider-package';
+import { generateText } from 'ai';
+
+const provider = createProvider({
+  apiKey: process.env.PROVIDER_API_KEY,
+  // provider-specific configuration
+});
+
+const { text } = await generateText({
+  model: provider('model-id'),
+  prompt: 'Hello, world!',
+});
+```
+
+## Creating Your Own Provider
+
+You can create your own custom provider by implementing the Language Model Specification. This allows you to:
+
+- Integrate proprietary AI services
+- Add support for new AI platforms
+- Create specialized wrappers for existing services
+- Implement custom model routing logic
+
+Learn more about [creating custom providers](./custom-providers).
+
+## Provider Quality and Support
+
+Community providers are maintained by third parties and may vary in:
+
+- **Feature completeness** - Some providers may not support all AI SDK features
+- **Update frequency** - Maintenance schedules differ between providers
+- **Documentation quality** - Documentation depth varies by provider
+- **API compatibility** - Breaking changes may occur independently of the AI SDK
+
+When choosing a community provider, consider:
+
+1. Checking the provider's documentation and examples
+2. Reviewing the provider's GitHub repository for activity
+3. Testing with your specific use case
+4. Having fallback options for critical applications
+
+## Contributing
+
+If you've built a provider that implements the Language Model Specification, you can:
+
+1. Publish it to npm
+2. Add documentation and examples
+3. Submit a pull request to add it to the community providers list
+
+<Note>
+Do you have a provider that supports the AI SDK and has integration documentation? Please open a pull request to add it to the list.
+</Note>
+
+## Community Provider Cards
+
+<CommunityModelCards />

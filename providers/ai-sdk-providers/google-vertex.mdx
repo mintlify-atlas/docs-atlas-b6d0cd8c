@@ -1,0 +1,240 @@
+---
+title: Google Vertex AI Provider
+description: Learn how to use Google Vertex AI for enterprise-grade AI applications with the AI SDK.
+---
+
+# Google Vertex AI Provider
+
+The Google Vertex AI provider enables you to use Google's Gemini models through Vertex AI with enterprise features like VPC, custom endpoints, and more.
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @ai-sdk/google-vertex
+```
+
+```bash pnpm
+pnpm add @ai-sdk/google-vertex
+```
+
+```bash yarn
+yarn add @ai-sdk/google-vertex
+```
+
+```bash bun
+bun add @ai-sdk/google-vertex
+```
+</CodeGroup>
+
+## Setup
+
+Set up Google Cloud authentication and configure your environment:
+
+```bash
+GOOGLE_VERTEX_PROJECT=your-project-id
+GOOGLE_VERTEX_LOCATION=us-central1
+```
+
+## Usage
+
+### Basic Text Generation
+
+```typescript
+import { vertex } from '@ai-sdk/google-vertex';
+import { generateText } from 'ai';
+
+const { text } = await generateText({
+  model: vertex('gemini-2.0-flash'),
+  prompt: 'Explain cloud computing.',
+});
+```
+
+### Streaming Responses
+
+```typescript
+import { vertex } from '@ai-sdk/google-vertex';
+import { streamText } from 'ai';
+
+const result = streamText({
+  model: vertex('gemini-2.0-flash'),
+  prompt: 'Write about artificial intelligence.',
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### Structured Output
+
+```typescript
+import { vertex } from '@ai-sdk/google-vertex';
+import { generateObject } from 'ai';
+import { z } from 'zod';
+
+const { object } = await generateObject({
+  model: vertex('gemini-2.0-flash'),
+  schema: z.object({
+    analysis: z.string(),
+    sentiment: z.enum(['positive', 'negative', 'neutral']),
+  }),
+  prompt: 'Analyze customer feedback.',
+});
+```
+
+## Configuration
+
+### Custom Provider Instance
+
+```typescript
+import { createVertex } from '@ai-sdk/google-vertex';
+
+const vertex = createVertex({
+  project: 'your-project-id',
+  location: 'us-central1',
+  googleAuthOptions: {
+    credentials: {
+      client_email: 'your-email',
+      private_key: 'your-key',
+    },
+  },
+});
+```
+
+### Provider Options
+
+- **project**: Google Cloud project ID
+- **location**: Region for API calls (e.g., 'us-central1')
+- **googleAuthOptions**: Authentication configuration
+
+## Available Models
+
+### Gemini Models
+
+- `gemini-2.0-flash` - Fast and efficient
+- `gemini-1.5-pro` - Most capable model
+- `gemini-1.5-flash` - Balanced performance
+
+## Advanced Features
+
+### Vision
+
+```typescript
+import { vertex } from '@ai-sdk/google-vertex';
+import { generateText } from 'ai';
+import fs from 'fs';
+
+const result = await generateText({
+  model: vertex('gemini-2.0-flash'),
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Analyze this image.' },
+        { type: 'image', image: fs.readFileSync('./image.png') },
+      ],
+    },
+  ],
+});
+```
+
+### Code Execution
+
+```typescript
+import { vertex } from '@ai-sdk/google-vertex';
+import { generateText } from 'ai';
+
+const { text } = await generateText({
+  model: vertex('gemini-2.0-flash'),
+  tools: {
+    code_execution: vertex.tools.codeExecution({}),
+  },
+  prompt: 'Calculate compound interest for $10,000 at 5% over 10 years.',
+});
+```
+
+### Google Search
+
+```typescript
+import { vertex } from '@ai-sdk/google-vertex';
+import { generateText } from 'ai';
+
+const { text, sources } = await generateText({
+  model: vertex('gemini-2.0-flash'),
+  tools: {
+    google_search: vertex.tools.googleSearch({}),
+  },
+  prompt: 'Latest technology news.',
+});
+```
+
+### PDF Support
+
+```typescript
+import { vertex } from '@ai-sdk/google-vertex';
+import { generateText } from 'ai';
+import fs from 'fs';
+
+const result = await generateText({
+  model: vertex('gemini-2.0-flash'),
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Extract key information.' },
+        {
+          type: 'file',
+          data: fs.readFileSync('./report.pdf'),
+          mediaType: 'application/pdf',
+        },
+      ],
+    },
+  ],
+});
+```
+
+### Embeddings
+
+```typescript
+import { vertex } from '@ai-sdk/google-vertex';
+import { embed } from 'ai';
+
+const { embedding } = await embed({
+  model: vertex.embeddingModel('text-embedding-005'),
+  value: 'Enterprise AI solution',
+});
+```
+
+**Available Models:**
+- `text-embedding-005` (768 dimensions)
+
+### Image Generation
+
+```typescript
+import { vertex } from '@ai-sdk/google-vertex';
+import { generateImage } from 'ai';
+
+const { image } = await generateImage({
+  model: vertex.image('imagen-3.0-generate-001'),
+  prompt: 'Corporate office interior',
+  aspectRatio: '16:9',
+});
+```
+
+**Available Models:**
+- `imagen-3.0-generate-001` - Enterprise image generation
+
+## Model Capabilities
+
+| Model | Vision | Tools | Structured Output |
+|-------|--------|-------|-------------------|
+| gemini-2.0-flash | ✓ | ✓ | ✓ |
+| gemini-1.5-pro | ✓ | ✓ | ✓ |
+| gemini-1.5-flash | ✓ | ✓ | ✓ |
+
+## Resources
+
+- [Vertex AI Documentation](https://cloud.google.com/vertex-ai/docs)
+- [AI SDK Documentation](/docs)
+- [Google Cloud Console](https://console.cloud.google.com/)

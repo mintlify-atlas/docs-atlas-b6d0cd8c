@@ -1,0 +1,195 @@
+---
+title: embedMany
+description: API reference for the embedMany function
+---
+
+Embeds several values using an embedding model.
+
+`embedMany` automatically splits large requests into smaller chunks if the model has a limit on how many embeddings can be generated in a single call.
+
+```typescript
+import { embedMany } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: [
+    'sunny day at the beach',
+    'rainy day in the mountains',
+    'snowy day in the city',
+  ],
+});
+
+console.log(result.embeddings);
+```
+
+## Parameters
+
+<ParamField path="model" type="EmbeddingModel" required>
+  The embedding model to use.
+</ParamField>
+
+<ParamField path="values" type="Array<string>" required>
+  The values that should be embedded.
+</ParamField>
+
+<ParamField path="maxRetries" type="number" default="2">
+  Maximum number of retries per embedding model call. Set to 0 to disable retries.
+</ParamField>
+
+<ParamField path="abortSignal" type="AbortSignal">
+  Abort signal for canceling the embedding request.
+</ParamField>
+
+<ParamField path="headers" type="Record<string, string>">
+  Additional headers to include in the request. Only applicable for HTTP-based providers.
+</ParamField>
+
+<ParamField path="maxParallelCalls" type="number" default="Infinity">
+  Maximum number of concurrent requests. When the model supports parallel calls and there are multiple chunks,
+  this limits how many requests can run simultaneously.
+</ParamField>
+
+<ParamField path="providerOptions" type="ProviderOptions">
+  Additional provider-specific options. They are passed through to the provider from the AI SDK
+  and enable provider-specific functionality that can be fully encapsulated in the provider.
+</ParamField>
+
+<ParamField path="experimental_telemetry" type="TelemetrySettings">
+  Optional telemetry configuration (experimental).
+</ParamField>
+
+## Returns
+
+<ResponseField name="values" type="Array<string>">
+  The values that were embedded.
+</ResponseField>
+
+<ResponseField name="embeddings" type="Array<number[]>">
+  The embedding vectors as an array of number arrays. Each embedding corresponds to the input value at the same index.
+</ResponseField>
+
+<ResponseField name="usage" type="{ tokens: number }">
+  The total token usage for all embedding operations.
+</ResponseField>
+
+<ResponseField name="warnings" type="Array<CallWarning>">
+  Warnings from the embedding model provider (e.g., unsupported settings).
+</ResponseField>
+
+<ResponseField name="providerMetadata" type="ProviderMetadata">
+  Additional provider-specific metadata aggregated from all requests.
+</ResponseField>
+
+<ResponseField name="responses" type="Array<EmbeddingModelResponseMetadata>">
+  Response metadata from all embedding model calls.
+</ResponseField>
+
+## Examples
+
+### Basic batch embedding
+
+```typescript
+import { embedMany } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: [
+    'sunny day at the beach',
+    'rainy day in the mountains',
+    'snowy day in the city',
+  ],
+});
+
+console.log(result.embeddings);
+// [
+//   [0.123, -0.456, 0.789, ...],
+//   [0.234, -0.567, 0.890, ...],
+//   [0.345, -0.678, 0.901, ...]
+// ]
+```
+
+### With usage tracking
+
+```typescript
+import { embedMany } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: [
+    'sunny day at the beach',
+    'rainy day in the mountains',
+    'snowy day in the city',
+  ],
+});
+
+console.log('Total tokens used:', result.usage.tokens);
+console.log('Number of embeddings:', result.embeddings.length);
+console.log('Embedding dimensions:', result.embeddings[0].length);
+```
+
+### Large batch with parallel processing
+
+```typescript
+import { embedMany } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// Generate 1000 values to embed
+const values = Array.from({ length: 1000 }, (_, i) => `Document ${i}`);
+
+const result = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values,
+  maxParallelCalls: 5, // Process up to 5 chunks in parallel
+});
+
+console.log('Embedded', result.embeddings.length, 'documents');
+console.log('Total tokens used:', result.usage.tokens);
+```
+
+### Semantic search
+
+```typescript
+import { embed, embedMany } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const embeddingModel = openai.embedding('text-embedding-3-small');
+
+// Embed a corpus of documents
+const documents = [
+  'The beach was sunny and warm',
+  'Mountains covered in snow',
+  'City lights at night',
+  'Forest trail in autumn',
+];
+
+const { embeddings: documentEmbeddings } = await embedMany({
+  model: embeddingModel,
+  values: documents,
+});
+
+// Embed a search query
+const { embedding: queryEmbedding } = await embed({
+  model: embeddingModel,
+  value: 'warm weather',
+});
+
+// Calculate cosine similarity
+function cosineSimilarity(a: number[], b: number[]): number {
+  const dotProduct = a.reduce((sum, val, i) => sum + val * b[i], 0);
+  const magnitudeA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0));
+  const magnitudeB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0));
+  return dotProduct / (magnitudeA * magnitudeB);
+}
+
+// Find most similar document
+const similarities = documentEmbeddings.map((docEmbedding, index) => ({
+  document: documents[index],
+  similarity: cosineSimilarity(queryEmbedding, docEmbedding),
+}));
+
+similarities.sort((a, b) => b.similarity - a.similarity);
+console.log('Most similar:', similarities[0]);
+```

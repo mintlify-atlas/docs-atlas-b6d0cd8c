@@ -1,0 +1,531 @@
+---
+title: Settings
+description: Learn how to configure AI SDK Core functions with model parameters and settings.
+---
+
+# Settings
+
+AI SDK Core functions support a variety of settings to control model behavior, generation quality, and execution flow. These settings work across all providers with a standardized interface.
+
+## Common Settings
+
+All AI SDK functions (`generateText`, `streamText`) support these common settings:
+
+### maxOutputTokens
+
+Maximum number of tokens to generate:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  maxOutputTokens: 512, // Limit to 512 tokens
+  prompt: 'Write a comprehensive guide to TypeScript',
+});
+```
+
+<ParamField path="maxOutputTokens" type="number">
+  Maximum number of tokens to generate. Use this to control response length and costs.
+</ParamField>
+
+### temperature
+
+Controls randomness in generation:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// Deterministic, focused responses
+const result1 = await generateText({
+  model: openai('gpt-5'),
+  temperature: 0, // Most deterministic
+  prompt: 'What is 2 + 2?',
+});
+
+// Creative, varied responses
+const result2 = await generateText({
+  model: openai('gpt-5'),
+  temperature: 1.5, // More random
+  prompt: 'Write a creative story',
+});
+```
+
+<ParamField path="temperature" type="number">
+  Controls randomness. Lower values (closer to 0) make output more deterministic. Higher values increase creativity and variation. Range depends on provider.
+</ParamField>
+
+<Note>
+  Recommended to set either `temperature` or `topP`, but not both.
+</Note>
+
+### topP
+
+Nucleus sampling parameter:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  topP: 0.1, // Only consider tokens in top 10% probability
+  prompt: 'Explain quantum computing',
+});
+```
+
+<ParamField path="topP" type="number">
+  Nucleus sampling. Consider only tokens with the top P probability mass. For example, 0.1 means only tokens in the top 10% are considered.
+</ParamField>
+
+### topK
+
+Sample from top K options:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  topK: 50, // Consider only top 50 tokens
+  prompt: 'Generate a story',
+});
+```
+
+<ParamField path="topK" type="number">
+  Sample from the top K options for each token. Removes "long tail" low probability responses. Advanced use cases only.
+</ParamField>
+
+### presencePenalty
+
+Penalty for repeating information already in the prompt:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  presencePenalty: 0.6, // Discourage repeating prompt content
+  prompt: 'The sky is blue. Write about the weather.',
+});
+```
+
+<ParamField path="presencePenalty" type="number">
+  Affects likelihood of repeating information from the prompt. For most providers, 0 means no penalty.
+</ParamField>
+
+### frequencyPenalty
+
+Penalty for using the same words repeatedly:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  frequencyPenalty: 0.5, // Discourage word repetition
+  prompt: 'Write about artificial intelligence',
+});
+```
+
+<ParamField path="frequencyPenalty" type="number">
+  Affects likelihood of repeatedly using the same words or phrases. For most providers, 0 means no penalty.
+</ParamField>
+
+### stopSequences
+
+Stop generation when specific sequences are encountered:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  stopSequences: ['END', '---', '###'],
+  prompt: 'Generate a list. End with END.',
+});
+```
+
+<ParamField path="stopSequences" type="string[]">
+  Array of sequences that stop generation when encountered. Providers may limit the number of stop sequences.
+</ParamField>
+
+### seed
+
+Seed for deterministic results:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  seed: 12345, // Reproducible results
+  temperature: 0,
+  prompt: 'Generate a random story',
+});
+```
+
+<ParamField path="seed" type="number">
+  Integer seed for random sampling. When set and supported by the model, generates deterministic results.
+</ParamField>
+
+## Retry and Timeout Settings
+
+### maxRetries
+
+Configure automatic retries for failed requests:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  maxRetries: 5, // Retry up to 5 times on failure
+  prompt: 'Generate text',
+});
+```
+
+<ParamField path="maxRetries" type="number" default="2">
+  Maximum number of retries for failed requests. Set to 0 to disable retries.
+</ParamField>
+
+### abortSignal
+
+Cancel requests programmatically:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const controller = new AbortController();
+
+// Cancel after 5 seconds
+setTimeout(() => controller.abort(), 5000);
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  abortSignal: controller.signal,
+  prompt: 'Write a long essay',
+});
+```
+
+<ParamField path="abortSignal" type="AbortSignal">
+  Abort signal for canceling the request. Can be forwarded from UI or created with `AbortSignal.timeout()`.
+</ParamField>
+
+#### Using AbortSignal.timeout
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  abortSignal: AbortSignal.timeout(5000), // 5 second timeout
+  prompt: 'Generate content',
+});
+```
+
+### timeout
+
+Simplified timeout configuration:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// Simple timeout (milliseconds)
+const result1 = await generateText({
+  model: openai('gpt-5'),
+  timeout: 5000, // 5 seconds
+  prompt: 'Generate text',
+});
+
+// Granular timeout configuration
+const result2 = await generateText({
+  model: openai('gpt-5'),
+  timeout: {
+    totalMs: 60000,  // 60 seconds total
+    stepMs: 10000,   // 10 seconds per step
+  },
+  prompt: 'Generate text',
+});
+```
+
+<ParamField path="timeout" type="number | object">
+  Timeout in milliseconds (number) or object with granular settings:
+  - `totalMs`: Total timeout for entire operation
+  - `stepMs`: Timeout per step (for multi-step operations)
+  - `chunkMs`: Timeout between stream chunks (streaming only)
+</ParamField>
+
+#### Chunk Timeout (Streaming)
+
+```typescript
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = streamText({
+  model: openai('gpt-5'),
+  timeout: {
+    chunkMs: 5000, // Abort if no chunk received for 5 seconds
+  },
+  prompt: 'Stream a story',
+});
+```
+
+## Request Settings
+
+### headers
+
+Add custom HTTP headers:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  headers: {
+    'X-Custom-Header': 'value',
+    'Prompt-Id': 'my-prompt-123',
+  },
+  prompt: 'Generate text',
+});
+```
+
+<ParamField path="headers" type="Record<string, string>">
+  Custom HTTP headers to include in the request. Only applicable for HTTP-based providers.
+</ParamField>
+
+<Note>
+  The `headers` setting is for request-specific headers. You can also set headers in provider configuration for all requests.
+</Note>
+
+## Provider-Specific Settings
+
+Use `providerOptions` for provider-specific features:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  providerOptions: {
+    openai: {
+      parallelToolCalls: true,
+      strictJsonSchema: true,
+    },
+  },
+  prompt: 'Generate text',
+});
+```
+
+<ParamField path="providerOptions" type="object">
+  Provider-specific options. See individual provider documentation for available options.
+</ParamField>
+
+## Settings for Specific Use Cases
+
+### Deterministic Output
+
+For consistent, reproducible results:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  temperature: 0,
+  seed: 12345,
+  prompt: 'Generate structured data',
+});
+```
+
+### Creative Writing
+
+For varied, creative responses:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  temperature: 1.2,
+  presencePenalty: 0.6,
+  frequencyPenalty: 0.5,
+  prompt: 'Write a creative short story',
+});
+```
+
+### Tool Calling
+
+For reliable tool execution:
+
+```typescript
+import { generateText, tool } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  temperature: 0, // Deterministic tool calls
+  maxRetries: 3,  // Retry on failures
+  tools: {
+    weather: tool({
+      inputSchema: z.object({ location: z.string() }),
+      execute: async ({ location }) => ({ temperature: 72 }),
+    }),
+  },
+  prompt: 'What is the weather in SF?',
+});
+```
+
+### Long-Running Requests
+
+For operations that may take time:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  maxOutputTokens: 4000,
+  timeout: {
+    totalMs: 120000, // 2 minutes total
+    stepMs: 30000,   // 30 seconds per step
+  },
+  maxRetries: 5,
+  prompt: 'Write a comprehensive article',
+});
+```
+
+## Checking for Unsupported Settings
+
+Not all providers support all settings. Check warnings:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  temperature: 0.7,
+  topP: 0.9,
+  topK: 50,
+  prompt: 'Generate text',
+});
+
+if (result.warnings && result.warnings.length > 0) {
+  console.log('Provider warnings:', result.warnings);
+  // Some settings may not be supported
+}
+```
+
+## Settings Reference
+
+### Generation Parameters
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `maxOutputTokens` | `number` | Provider default | Maximum tokens to generate |
+| `temperature` | `number` | Provider default | Randomness (0 = deterministic) |
+| `topP` | `number` | Provider default | Nucleus sampling threshold |
+| `topK` | `number` | Provider default | Top-K sampling limit |
+| `presencePenalty` | `number` | `0` | Penalty for repeating prompt content |
+| `frequencyPenalty` | `number` | `0` | Penalty for word repetition |
+| `stopSequences` | `string[]` | `undefined` | Sequences that stop generation |
+| `seed` | `number` | `undefined` | Random seed for reproducibility |
+
+### Execution Control
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `maxRetries` | `number` | `2` | Maximum retry attempts |
+| `timeout` | `number \| object` | `undefined` | Request timeout configuration |
+| `abortSignal` | `AbortSignal` | `undefined` | Signal for request cancellation |
+| `headers` | `Record<string,string>` | `undefined` | Custom HTTP headers |
+
+## Best Practices
+
+### 1. Use Temperature 0 for Structured Output
+
+```typescript
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  temperature: 0, // Deterministic
+  output: Output.object({ schema }),
+  prompt: 'Extract data',
+});
+```
+
+### 2. Set Timeouts for Production
+
+```typescript
+const result = await generateText({
+  model: openai('gpt-5'),
+  timeout: 30000, // 30 second timeout
+  maxRetries: 3,
+  prompt: 'Generate content',
+});
+```
+
+### 3. Don't Set Both Temperature and TopP
+
+```typescript
+// Good: Use one or the other
+const result1 = await generateText({
+  model: openai('gpt-5'),
+  temperature: 0.7,
+  prompt: 'Generate text',
+});
+
+// Avoid: Using both
+const result2 = await generateText({
+  model: openai('gpt-5'),
+  temperature: 0.7,
+  topP: 0.9, // Avoid using both
+  prompt: 'Generate text',
+});
+```
+
+### 4. Check Warnings
+
+Always check for provider warnings:
+
+```typescript
+const result = await generateText({
+  model: openai('gpt-5'),
+  // ... settings
+});
+
+if (result.warnings?.length) {
+  console.warn('Settings warnings:', result.warnings);
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Generating Text" icon="text" href="/ai-sdk-core/generating-text">
+    Learn about text generation
+  </Card>
+  <Card title="Prompt Engineering" icon="wand-magic-sparkles" href="/ai-sdk-core/prompt-engineering">
+    Optimize your prompts
+  </Card>
+  <Card title="Tool Calling" icon="wrench" href="/ai-sdk-core/tools-and-tool-calling">
+    Use tools with models
+  </Card>
+</CardGroup>

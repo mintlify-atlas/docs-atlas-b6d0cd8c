@@ -1,0 +1,550 @@
+---
+title: Prompt Engineering
+description: Learn best practices for writing effective prompts with AI SDK Core.
+---
+
+# Prompt Engineering
+
+Effective prompts are crucial for getting high-quality results from language models. This guide covers best practices and tips for prompt engineering with AI SDK Core.
+
+## Basic Principles
+
+### Be Specific and Clear
+
+Provide clear, specific instructions:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// Vague
+const { text } = await generateText({
+  model: openai('gpt-5'),
+  prompt: 'Write about AI',
+});
+
+// Better: Specific and clear
+const { text } = await generateText({
+  model: openai('gpt-5'),
+  prompt: 'Write a 3-paragraph explanation of how transformer models work, suitable for software engineers with no ML background.',
+});
+```
+
+### Use System Messages
+
+Set the model's role and behavior with system messages:
+
+```typescript
+const { text } = await generateText({
+  model: openai('gpt-5'),
+  system: 'You are a professional technical writer. You write clear, concise documentation with code examples. Use simple language and avoid jargon.',
+  prompt: 'Explain async/await in JavaScript',
+});
+```
+
+### Provide Context
+
+Include relevant context in your prompts:
+
+```typescript
+const { text } = await generateText({
+  model: openai('gpt-5'),
+  prompt: `Summarize this article for a newsletter:
+  
+  Title: The Future of Web Development
+  
+  Article:
+  ${articleContent}
+  
+  Keep the summary to 2-3 sentences and highlight key takeaways.`,
+});
+```
+
+## Prompts for Tools
+
+When using tools, follow these best practices:
+
+### 1. Use Strong Models
+
+Use models that excel at tool calling:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
+
+// Good models for tool calling
+const result = await generateText({
+  model: openai('gpt-5'),          // Excellent
+  // model: openai('gpt-4.1'),     // Good
+  // model: anthropic('claude-4-sonnet'), // Excellent
+  tools: { /* ... */ },
+  prompt: 'What is the weather in SF?',
+});
+```
+
+### 2. Limit the Number of Tools
+
+Keep tools focused and limited (5 or fewer recommended):
+
+```typescript
+// Good: Small, focused set of tools
+const tools = {
+  weather: weatherTool,
+  calendar: calendarTool,
+  email: emailTool,
+};
+
+// Avoid: Too many tools can confuse the model
+const tools = {
+  weather: weatherTool,
+  calendar: calendarTool,
+  email: emailTool,
+  slack: slackTool,
+  github: githubTool,
+  jira: jiraTool,
+  notion: notionTool,
+  figma: figmaTool,
+  // ... too many!
+};
+```
+
+### 3. Use Descriptive Names
+
+Choose semantic, meaningful names:
+
+```typescript
+import { tool } from 'ai';
+import { z } from 'zod';
+
+// Good: Clear, descriptive names
+const getCurrentWeather = tool({
+  description: 'Get the current weather for a specific location',
+  inputSchema: z.object({
+    location: z.string().describe('City and country, e.g., "San Francisco, USA"'),
+    units: z.enum(['celsius', 'fahrenheit']).describe('Temperature units'),
+  }),
+  execute: async ({ location, units }) => { /* ... */ },
+});
+
+// Avoid: Vague or cryptic names
+const tool1 = tool({
+  description: 'Gets weather',
+  inputSchema: z.object({
+    loc: z.string(),
+    u: z.enum(['c', 'f']),
+  }),
+  execute: async ({ loc, u }) => { /* ... */ },
+});
+```
+
+### 4. Write Detailed Descriptions
+
+Provide comprehensive tool and parameter descriptions:
+
+```typescript
+import { tool } from 'ai';
+import { z } from 'zod';
+
+const queryDatabase = tool({
+  description: 'Query the user database to find users matching specific criteria. Returns user profiles including name, email, role, and registration date.',
+  inputSchema: z.object({
+    role: z
+      .enum(['admin', 'user', 'guest'])
+      .optional()
+      .describe('Filter by user role. Leave empty to include all roles.'),
+    registeredAfter: z
+      .string()
+      .optional()
+      .describe('ISO date string. Only return users registered after this date.'),
+    limit: z
+      .number()
+      .max(100)
+      .optional()
+      .describe('Maximum number of users to return (max: 100, default: 10)'),
+  }),
+  execute: async ({ role, registeredAfter, limit = 10 }) => { /* ... */ },
+});
+```
+
+### 5. Keep Schemas Simple
+
+Avoid overly complex nested structures:
+
+```typescript
+import { z } from 'zod';
+
+// Good: Simple, flat structure
+const inputSchema = z.object({
+  task: z.string(),
+  priority: z.enum(['low', 'medium', 'high']),
+  dueDate: z.string().optional(),
+});
+
+// Avoid: Deeply nested, complex schemas
+const inputSchema = z.object({
+  task: z.object({
+    details: z.object({
+      primary: z.string().or(z.array(z.string())),
+      secondary: z.union([z.string(), z.number(), z.boolean()]).optional(),
+    }),
+  }),
+  metadata: z.record(z.union([z.string(), z.number(), z.array(z.string())])),
+});
+```
+
+### 6. Document Tool Output
+
+When tool dependencies exist, describe output in the tool description:
+
+```typescript
+import { tool } from 'ai';
+import { z } from 'zod';
+
+const tools = {
+  getUserId: tool({
+    description: 'Get the user ID for a given email address. Returns an object with a "userId" field containing the numeric user ID.',
+    inputSchema: z.object({
+      email: z.string().email(),
+    }),
+    execute: async ({ email }) => ({ userId: 12345 }),
+  }),
+  
+  getUserProfile: tool({
+    description: 'Get detailed user profile. Requires a numeric user ID (use getUserId tool first to get the ID from an email).',
+    inputSchema: z.object({
+      userId: z.number().describe('The numeric user ID'),
+    }),
+    execute: async ({ userId }) => ({ /* ... */ }),
+  }),
+};
+```
+
+### 7. Provide Examples
+
+Include example tool usage in prompts:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { text } = await generateText({
+  model: openai('gpt-5'),
+  tools: { searchDatabase, updateRecord },
+  prompt: `You have access to database tools.
+  
+  Example usage:
+  1. To find a user: Use searchDatabase with {"query": "email@example.com"}
+  2. To update: Use updateRecord with {"id": 123, "fields": {"status": "active"}}
+  
+  Task: Find the user with email john@example.com and set their status to active.`,
+});
+```
+
+## Prompts for Structured Data
+
+### Use Clear Property Descriptions
+
+```typescript
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  output: Output.object({
+    schema: z.object({
+      name: z.string().describe('The full name of the recipe'),
+      servings: z.number().describe('Number of servings (typically 2-8)'),
+      prepTime: z.number().describe('Preparation time in minutes'),
+      ingredients: z.array(
+        z.object({
+          name: z.string().describe('Ingredient name'),
+          amount: z.string().describe('Amount in grams (g) or milliliters (ml)'),
+        })
+      ).describe('List of all ingredients with precise amounts'),
+      steps: z.array(z.string()).describe('Numbered cooking steps in order'),
+    }),
+  }),
+  prompt: 'Generate a lasagna recipe for 4 people.',
+});
+```
+
+### Handle Dates Properly
+
+Use string schemas with transformations for dates:
+
+```typescript
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  output: Output.object({
+    schema: z.object({
+      events: z.array(
+        z.object({
+          name: z.string(),
+          date: z
+            .string()
+            .date()
+            .describe('Date in YYYY-MM-DD format')
+            .transform(value => new Date(value)),
+        })
+      ),
+    }),
+  }),
+  prompt: 'List 5 important events from the year 2000.',
+});
+
+// output.events[0].date is now a Date object
+```
+
+### Use Nullable for Optional Fields
+
+For maximum compatibility with strict schemas:
+
+```typescript
+import { z } from 'zod';
+
+// Good: Works with strict schema validation
+const schema = z.object({
+  title: z.string(),
+  description: z.string().nullable(), // Use nullable
+  tags: z.array(z.string()).nullable(),
+});
+
+// May fail with some providers' strict mode
+const schema = z.object({
+  title: z.string(),
+  description: z.string().optional(), // Avoid optional
+  tags: z.array(z.string()).optional(),
+});
+```
+
+### Set Temperature to 0
+
+For deterministic structured output:
+
+```typescript
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  temperature: 0, // Deterministic results
+  output: Output.object({
+    schema: z.object({
+      category: z.enum(['technology', 'business', 'health']),
+      confidence: z.number().min(0).max(1),
+    }),
+  }),
+  prompt: 'Classify this article: "AI breakthrough in healthcare"',
+});
+```
+
+## Debugging Prompts
+
+### Inspect Warnings
+
+Check for unsupported features:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  prompt: 'Hello, world!',
+  temperature: 0.7,
+  topP: 0.9,
+});
+
+if (result.warnings && result.warnings.length > 0) {
+  console.log('Warnings:', result.warnings);
+  // Provider may not support both temperature and topP
+}
+```
+
+### View Request Bodies
+
+Inspect the actual request sent to the provider:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  prompt: 'Explain quantum computing',
+});
+
+// See exact request sent to OpenAI
+console.log(JSON.stringify(result.request.body, null, 2));
+```
+
+### Log Tool Calls
+
+Monitor tool execution:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  tools: { /* ... */ },
+  prompt: 'What is the weather?',
+  
+  onStepFinish({ stepNumber, toolCalls, toolResults }) {
+    console.log(`Step ${stepNumber}:`);
+    console.log('Tool calls:', JSON.stringify(toolCalls, null, 2));
+    console.log('Tool results:', JSON.stringify(toolResults, null, 2));
+  },
+});
+```
+
+## Common Patterns
+
+### Few-Shot Prompting
+
+Provide examples in your prompt:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { text } = await generateText({
+  model: openai('gpt-5'),
+  prompt: `Classify the sentiment of these reviews:
+  
+  Review: "This product is amazing! Exceeded my expectations."
+  Sentiment: positive
+  
+  Review: "Terrible quality, broke after one day."
+  Sentiment: negative
+  
+  Review: "It's okay, nothing special."
+  Sentiment: neutral
+  
+  Review: "Best purchase I've made all year!"
+  Sentiment:`,
+});
+
+console.log(text); // "positive"
+```
+
+### Chain of Thought
+
+Ask the model to explain its reasoning:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { text } = await generateText({
+  model: openai('gpt-5'),
+  prompt: `A store has 15 apples. They sell 8 apples and then receive a delivery of 12 more apples. How many apples do they have?
+  
+  Let's solve this step by step:`,
+});
+
+console.log(text);
+// "1. Start with 15 apples
+//  2. Sell 8: 15 - 8 = 7 apples
+//  3. Receive 12: 7 + 12 = 19 apples
+//  Answer: 19 apples"
+```
+
+### Role-Based Prompting
+
+Assign the model a specific role:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { text } = await generateText({
+  model: openai('gpt-5'),
+  system: `You are a senior software architect with 15 years of experience. You:
+  - Prioritize maintainability and scalability
+  - Consider security implications
+  - Suggest modern, battle-tested solutions
+  - Explain trade-offs clearly`,
+  prompt: 'How should I structure authentication in a Node.js microservices application?',
+});
+```
+
+### Constrained Generation
+
+Use clear constraints:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { text } = await generateText({
+  model: openai('gpt-5'),
+  prompt: `Write a product description for a wireless keyboard.
+  
+  Requirements:
+  - Exactly 3 sentences
+  - Mention at least 2 key features
+  - Target audience: software developers
+  - Tone: professional but friendly`,
+});
+```
+
+## Tips Summary
+
+### General Prompts
+
+1. Be specific and clear
+2. Provide context and examples
+3. Use system messages to set behavior
+4. Add constraints when needed
+5. Request step-by-step reasoning for complex tasks
+
+### Tool Prompts
+
+1. Use strong models (GPT-5, Claude 4 Sonnet)
+2. Limit to 5 or fewer tools
+3. Use descriptive names and detailed descriptions
+4. Add `.describe()` to all schema properties
+5. Keep schemas simple and flat
+6. Document tool output formats
+7. Include example tool usage
+
+### Structured Data
+
+1. Add property descriptions
+2. Use `z.string().date()` for dates, then transform
+3. Use `.nullable()` instead of `.optional()`
+4. Set `temperature: 0` for consistency
+5. Provide output name and description
+
+### Debugging
+
+1. Check `result.warnings` for unsupported features
+2. Inspect `result.request.body` to see actual requests
+3. Use callbacks to log tool calls and results
+4. Test with different models to compare behavior
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Generating Text" icon="text" href="/ai-sdk-core/generating-text">
+    Learn about text generation functions
+  </Card>
+  <Card title="Tool Calling" icon="wrench" href="/ai-sdk-core/tools-and-tool-calling">
+    Master tool calling techniques
+  </Card>
+  <Card title="Structured Data" icon="shapes" href="/ai-sdk-core/generating-structured-data">
+    Generate type-safe structured data
+  </Card>
+  <Card title="Settings" icon="sliders" href="/ai-sdk-core/settings">
+    Configure model parameters
+  </Card>
+</CardGroup>

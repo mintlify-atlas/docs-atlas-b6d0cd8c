@@ -1,0 +1,287 @@
+---
+title: jsonSchema
+description: API reference for the jsonSchema function
+---
+
+Creates a schema using a JSON Schema definition.
+
+This is useful when you want to use JSON Schema directly instead of a validation library like Zod.
+
+```typescript
+import { jsonSchema } from 'ai';
+
+const schema = jsonSchema({
+  type: 'object',
+  properties: {
+    name: { type: 'string' },
+    age: { type: 'number' },
+  },
+  required: ['name', 'age'],
+  additionalProperties: false,
+});
+```
+
+## Parameters
+
+<ParamField path="jsonSchema" type="JSONSchema7 | PromiseLike<JSONSchema7> | (() => JSONSchema7 | PromiseLike<JSONSchema7>)" required>
+  The JSON Schema for the schema. Can be:
+  - A JSON Schema object (JSONSchema7)
+  - A promise that resolves to a JSON Schema object
+  - A function that returns a JSON Schema object or promise
+</ParamField>
+
+<ParamField path="validate" type="(value: unknown) => ValidationResult<OBJECT> | PromiseLike<ValidationResult<OBJECT>>">
+  Optional validation function for the schema.
+  
+  If provided, this function will be called to validate values against the schema.
+  Should return `{ success: true, value: OBJECT }` on success or `{ success: false, error: Error }` on failure.
+</ParamField>
+
+## Returns
+
+Returns a `Schema<OBJECT>` that can be used with AI SDK functions.
+
+## Examples
+
+### Basic JSON Schema
+
+```typescript
+import { jsonSchema } from 'ai';
+import { generateObject } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const personSchema = jsonSchema({
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: 'The person\'s name',
+    },
+    age: {
+      type: 'number',
+      description: 'The person\'s age',
+    },
+    occupation: {
+      type: 'string',
+      description: 'The person\'s occupation',
+    },
+  },
+  required: ['name', 'age'],
+  additionalProperties: false,
+});
+
+const result = await generateObject({
+  model: openai('gpt-4-turbo'),
+  schema: personSchema,
+  prompt: 'Generate a person profile',
+});
+```
+
+### With custom validation
+
+```typescript
+import { jsonSchema } from 'ai';
+
+const emailSchema = jsonSchema(
+  {
+    type: 'object',
+    properties: {
+      email: { type: 'string' },
+    },
+    required: ['email'],
+  },
+  {
+    validate: (value: unknown) => {
+      if (typeof value !== 'object' || value === null) {
+        return {
+          success: false,
+          error: new Error('Value must be an object'),
+        };
+      }
+
+      const obj = value as { email?: unknown };
+      
+      if (typeof obj.email !== 'string') {
+        return {
+          success: false,
+          error: new Error('Email must be a string'),
+        };
+      }
+
+      if (!obj.email.includes('@')) {
+        return {
+          success: false,
+          error: new Error('Invalid email format'),
+        };
+      }
+
+      return { success: true, value: obj as { email: string } };
+    },
+  }
+);
+```
+
+### Complex nested schema
+
+```typescript
+import { jsonSchema } from 'ai';
+
+const recipeSchema = jsonSchema({
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: 'The recipe name',
+    },
+    ingredients: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          quantity: { type: 'string' },
+          unit: { type: 'string' },
+        },
+        required: ['name', 'quantity'],
+      },
+      description: 'List of ingredients',
+    },
+    steps: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Cooking steps',
+    },
+    prepTime: {
+      type: 'number',
+      description: 'Preparation time in minutes',
+    },
+    cookTime: {
+      type: 'number',
+      description: 'Cooking time in minutes',
+    },
+  },
+  required: ['name', 'ingredients', 'steps'],
+  additionalProperties: false,
+});
+```
+
+### With enum values
+
+```typescript
+import { jsonSchema } from 'ai';
+
+const taskSchema = jsonSchema({
+  type: 'object',
+  properties: {
+    title: { type: 'string' },
+    priority: {
+      type: 'string',
+      enum: ['low', 'medium', 'high', 'urgent'],
+      description: 'Task priority level',
+    },
+    status: {
+      type: 'string',
+      enum: ['todo', 'in-progress', 'done'],
+      description: 'Task status',
+    },
+  },
+  required: ['title', 'priority', 'status'],
+});
+```
+
+### Lazy schema initialization
+
+```typescript
+import { jsonSchema } from 'ai';
+
+// Defer schema creation until it's actually needed
+const lazySchema = jsonSchema(
+  async () => {
+    // Load schema from file or API
+    const schemaData = await fetch('/api/schema').then(r => r.json());
+    return schemaData;
+  }
+);
+```
+
+### Array schema
+
+```typescript
+import { jsonSchema } from 'ai';
+
+const countriesSchema = jsonSchema({
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      name: { type: 'string' },
+      capital: { type: 'string' },
+      population: { type: 'number' },
+    },
+    required: ['name', 'capital'],
+  },
+});
+```
+
+### With definitions and references
+
+```typescript
+import { jsonSchema } from 'ai';
+
+const schemaWithRefs = jsonSchema({
+  type: 'object',
+  properties: {
+    user: { $ref: '#/definitions/User' },
+    posts: {
+      type: 'array',
+      items: { $ref: '#/definitions/Post' },
+    },
+  },
+  required: ['user'],
+  definitions: {
+    User: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+      },
+      required: ['id', 'name'],
+    },
+    Post: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        title: { type: 'string' },
+        content: { type: 'string' },
+      },
+      required: ['id', 'title'],
+    },
+  },
+});
+```
+
+## Type Inference
+
+When using `jsonSchema`, the TypeScript types must be provided manually:
+
+```typescript
+import { jsonSchema } from 'ai';
+
+type Person = {
+  name: string;
+  age: number;
+  occupation?: string;
+};
+
+const personSchema = jsonSchema<Person>({
+  type: 'object',
+  properties: {
+    name: { type: 'string' },
+    age: { type: 'number' },
+    occupation: { type: 'string' },
+  },
+  required: ['name', 'age'],
+});
+```
+
+For automatic type inference, consider using [`zodSchema`](/reference/utilities/zod-schema) instead.

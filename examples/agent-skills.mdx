@@ -1,0 +1,461 @@
+---
+title: Agent Skills
+description: Extend your AI agent with specialized capabilities that load at runtime using Agent Skills
+---
+
+# Agent Skills
+
+Learn how to extend your AI agent with [Agent Skills](https://agentskills.io), a lightweight format for adding specialized knowledge and workflows from markdown files.
+
+## What are Agent Skills?
+
+Agent Skills are folders containing instructions and resources that agents can load on-demand:
+
+```
+my-skill/
+├── SKILL.md          # Required: instructions + metadata
+├── scripts/          # Optional: executable code
+├── references/       # Optional: documentation
+└── assets/           # Optional: templates, resources
+```
+
+## How Skills Work
+
+Skills use **progressive disclosure** to manage context efficiently:
+
+1. **Discovery**: Agent loads only name and description at startup
+2. **Activation**: When relevant, agent reads full `SKILL.md` instructions
+3. **Execution**: Agent follows instructions, accessing bundled resources as needed
+
+## The SKILL.md File
+
+Every skill contains a `SKILL.md` file with frontmatter and instructions:
+
+```markdown filename="skills/pdf-processing/SKILL.md"
+---
+name: pdf-processing
+description: Extract text and tables from PDF files, fill forms, merge documents.
+---
+
+# PDF Processing
+
+## When to use this skill
+
+Use this skill when the user needs to:
+- Extract text or tables from PDFs
+- Fill PDF forms programmatically
+- Merge or split PDF files
+
+## How to extract text
+
+1. Install pdfplumber: `bash scripts/install-deps.sh`
+2. Run extraction: `bash scripts/extract-text.sh <pdf-path>`
+3. Results will be in `output/extracted.txt`
+
+## How to fill forms
+
+1. Use the template: `templates/form-template.json`
+2. Run: `bash scripts/fill-form.sh <pdf-path> <data-json>`
+```
+
+Frontmatter requires:
+- `name`: Short identifier
+- `description`: When to use this skill
+
+## Prerequisites
+
+Your agent needs:
+
+1. **Filesystem access**: Read files and directories
+2. **Load skill tool**: Read `SKILL.md` content
+3. **Command execution**: Optional, for skills with scripts
+
+## Implementation
+
+### Step 1: Define Sandbox Interface
+
+Create a generic interface for filesystem operations:
+
+```ts filename="lib/types.ts"
+interface Sandbox {
+  readFile(path: string, encoding: 'utf-8'): Promise<string>;
+  readdir(
+    path: string,
+    opts: { withFileTypes: true },
+  ): Promise<{ name: string; isDirectory(): boolean }[]>;
+  exec(command: string): Promise<{ stdout: string; stderr: string }>;
+}
+```
+
+### Step 2: Discover Skills
+
+Scan directories and extract metadata:
+
+```ts filename="lib/skills/discovery.ts"
+import yaml from 'js-yaml';
+
+interface SkillMetadata {
+  name: string;
+  description: string;
+  path: string;
+}
+
+function parseFrontmatter(content: string) {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match?.[1]) throw new Error('No frontmatter found');
+  return yaml.load(match[1]) as { name: string; description: string };
+}
+
+export async function discoverSkills(
+  sandbox: Sandbox,
+  directories: string[],
+): Promise<SkillMetadata[]> {
+  const skills: SkillMetadata[] = [];
+  const seenNames = new Set<string>();
+
+  for (const dir of directories) {
+    let entries;
+    try {
+      entries = await sandbox.readdir(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+
+      const skillDir = `${dir}/${entry.name}`;
+      const skillFile = `${skillDir}/SKILL.md`;
+
+      try {
+        const content = await sandbox.readFile(skillFile, 'utf-8');
+        const frontmatter = parseFrontmatter(content);
+
+        if (seenNames.has(frontmatter.name)) continue;
+        seenNames.add(frontmatter.name);
+
+        skills.push({
+          name: frontmatter.name,
+          description: frontmatter.description,
+          path: skillDir,
+        });
+      } catch {
+        continue;
+      }
+    }
+  }
+  return skills;
+}
+```
+
+### Step 3: Build System Prompt
+
+Include skill descriptions in system prompt:
+
+```ts filename="lib/skills/prompt.ts"
+export function buildSkillsPrompt(skills: SkillMetadata[]): string {
+  const skillsList = skills
+    .map(s => `- ${s.name}: ${s.description}`)
+    .join('\n');
+
+  return `
+## Skills
+
+Use the \`loadSkill\` tool to load a skill when the user's request
+would benefit from specialized instructions.
+
+Available skills:
+${skillsList}
+`;
+}
+```
+
+### Step 4: Create Load Skill Tool
+
+Implement the tool to load skill content:
+
+```ts filename="lib/skills/tools.ts"
+import { tool } from 'ai';
+import { z } from 'zod';
+
+function stripFrontmatter(content: string): string {
+  const match = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
+  return match ? content.slice(match[0].length).trim() : content.trim();
+}
+
+export const loadSkillTool = tool({
+  description: 'Load a skill to get specialized instructions',
+  inputSchema: z.object({
+    name: z.string().describe('The skill name to load'),
+  }),
+  execute: async ({ name }, { experimental_context }) => {
+    const { sandbox, skills } = experimental_context as {
+      sandbox: Sandbox;
+      skills: SkillMetadata[];
+    };
+
+    const skill = skills.find(s => s.name.toLowerCase() === name.toLowerCase());
+    if (!skill) {
+      return { error: `Skill '${name}' not found` };
+    }
+
+    const skillFile = `${skill.path}/SKILL.md`;
+    const content = await sandbox.readFile(skillFile, 'utf-8');
+    const body = stripFrontmatter(content);
+
+    return {
+      skillDirectory: skill.path,
+      content: body,
+    };
+  },
+});
+```
+
+### Step 5: Create Additional Tools
+
+Provide tools for accessing skill resources:
+
+```ts filename="lib/skills/tools.ts"
+export const readFileTool = tool({
+  description: 'Read a file from the filesystem',
+  inputSchema: z.object({ path: z.string() }),
+  execute: async ({ path }, { experimental_context }) => {
+    const { sandbox } = experimental_context as { sandbox: Sandbox };
+    return sandbox.readFile(path, 'utf-8');
+  },
+});
+
+export const bashTool = tool({
+  description: 'Execute a bash command',
+  inputSchema: z.object({ command: z.string() }),
+  execute: async ({ command }, { experimental_context }) => {
+    const { sandbox } = experimental_context as { sandbox: Sandbox };
+    return sandbox.exec(command);
+  },
+});
+```
+
+### Step 6: Wire Up the Agent
+
+Combine everything using `prepareCall`:
+
+```ts filename="lib/agent.ts"
+import { ToolLoopAgent } from 'ai';
+import { z } from 'zod';
+import { loadSkillTool, readFileTool, bashTool } from './skills/tools';
+import { buildSkillsPrompt } from './skills/prompt';
+
+const callOptionsSchema = z.object({
+  sandbox: z.custom<Sandbox>(),
+  skills: z.array(
+    z.object({
+      name: z.string(),
+      description: z.string(),
+      path: z.string(),
+    }),
+  ),
+});
+
+export const agent = new ToolLoopAgent({
+  model: 'openai/gpt-4o',
+  tools: {
+    loadSkill: loadSkillTool,
+    readFile: readFileTool,
+    bash: bashTool,
+  },
+  callOptionsSchema,
+  prepareCall: ({ options, ...settings }) => ({
+    ...settings,
+    instructions: `${settings.instructions}\n\n${buildSkillsPrompt(options.skills)}`,
+    experimental_context: {
+      sandbox: options.sandbox,
+      skills: options.skills,
+    },
+  }),
+});
+```
+
+### Step 7: Run the Agent
+
+```ts filename="index.ts"
+import { createSandbox } from './lib/sandbox';
+import { discoverSkills } from './lib/skills/discovery';
+import { agent } from './lib/agent';
+
+async function main() {
+  // Create sandbox
+  const sandbox = createSandbox({ workingDirectory: process.cwd() });
+
+  // Discover skills at startup
+  const skills = await discoverSkills(sandbox, [
+    '.agents/skills',
+    '~/.config/agent/skills',
+  ]);
+
+  console.log(`Loaded ${skills.length} skills:`);
+  skills.forEach(s => console.log(`  - ${s.name}: ${s.description}`));
+
+  // Run the agent
+  const result = await agent.run({
+    prompt: 'Extract text from report.pdf',
+    options: { sandbox, skills },
+  });
+
+  console.log(result);
+}
+
+main();
+```
+
+## Example Skill
+
+Here's a complete example skill:
+
+```markdown filename="skills/web-scraping/SKILL.md"
+---
+name: web-scraping
+description: Scrape websites, extract data, handle pagination, and export to JSON/CSV.
+---
+
+# Web Scraping
+
+## When to use
+
+Use when the user needs to:
+- Extract data from websites
+- Monitor website changes
+- Collect structured data at scale
+
+## Setup
+
+Install dependencies:
+```bash
+bash {skillDirectory}/scripts/install.sh
+```
+
+## Extract data from a single page
+
+```bash
+bash {skillDirectory}/scripts/scrape.sh <url> <css-selector>
+```
+
+Example:
+```bash
+bash {skillDirectory}/scripts/scrape.sh https://example.com "h1, p"
+```
+
+## Handle pagination
+
+Use the pagination template:
+```bash
+readFile {skillDirectory}/templates/pagination-config.json
+```
+
+Modify the config and run:
+```bash
+bash {skillDirectory}/scripts/scrape-paginated.sh config.json
+```
+```
+
+Corresponding files:
+
+```bash filename="skills/web-scraping/scripts/scrape.sh"
+#!/bin/bash
+url=$1
+selector=$2
+curl -s "$url" | pup "$selector" text{}
+```
+
+```json filename="skills/web-scraping/templates/pagination-config.json"
+{
+  "baseUrl": "https://example.com/page",
+  "pageParam": "page",
+  "startPage": 1,
+  "maxPages": 10,
+  "selector": ".item"
+}
+```
+
+## Using Skills in Next.js
+
+Integrate with a Next.js API route:
+
+```ts filename="app/api/agent/route.ts"
+import { streamText } from 'ai';
+import { agent } from '@/lib/agent';
+import { createSandbox } from '@/lib/sandbox';
+import { discoverSkills } from '@/lib/skills/discovery';
+
+export async function POST(req: Request) {
+  const { prompt } = await req.json();
+
+  const sandbox = createSandbox({ workingDirectory: process.cwd() });
+  const skills = await discoverSkills(sandbox, ['.agents/skills']);
+
+  const result = await agent.run({
+    prompt,
+    options: { sandbox, skills },
+  });
+
+  return result.toUIMessageStreamResponse();
+}
+```
+
+## Best Practices
+
+### Skill Design
+
+1. **Clear descriptions**: Help the agent know when to use the skill
+2. **Explicit instructions**: Provide step-by-step guidance
+3. **Examples**: Include example commands and outputs
+4. **Error handling**: Document common errors and solutions
+
+### Security
+
+1. **Validate inputs**: Sanitize all user inputs in skill scripts
+2. **Restrict commands**: Limit what bash commands can execute
+3. **Sandbox environment**: Run skills in isolated containers
+4. **Audit trails**: Log all skill executions
+
+### Organization
+
+```
+skills/
+├── data-processing/
+│   ├── SKILL.md
+│   ├── scripts/
+│   └── templates/
+├── api-integration/
+│   ├── SKILL.md
+│   ├── scripts/
+│   └── references/
+└── code-generation/
+    ├── SKILL.md
+    └── templates/
+```
+
+## Example Use Cases
+
+1. **Code Generation**: Templates and linters for different languages
+2. **Data Processing**: ETL workflows and data validation
+3. **API Integration**: Pre-configured API clients and auth flows
+4. **Testing**: Test generation and execution frameworks
+5. **Documentation**: Doc generators and formatters
+
+## Skill Discovery
+
+Browse community skills at [skills.sh](https://skills.sh)
+
+## Next Steps
+
+- Read the [Agent Skills specification](https://agentskills.io/specification)
+- Check out [example skills](https://github.com/anthropics/skills)
+- Learn [authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)
+- Use the [reference library](https://github.com/agentskills/agentskills) for validation
+
+## Resources
+
+- [Agent Skills official site](https://agentskills.io)
+- [Skills.sh community hub](https://skills.sh)
+- [AI SDK Tools documentation](/docs/foundations/tools)
+- [Agent development guide](/docs/ai-sdk-core/agents)

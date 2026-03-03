@@ -1,0 +1,367 @@
+---
+title: Streaming React Components
+description: Learn how to stream React components from the server to the client with AI SDK RSC
+---
+
+# Streaming React Components
+
+AI SDK RSC enables you to stream React components from server actions to the client as AI models generate content. This allows you to build responsive, progressively-rendered interfaces.
+
+## Core Primitives
+
+### createStreamableUI
+
+`createStreamableUI` creates a streamable UI component that can be updated over time.
+
+```tsx file="app/actions.tsx"
+'use server';
+
+import { createStreamableUI } from '@ai-sdk/rsc';
+
+export async function generateComponent() {
+  const stream = createStreamableUI(<div>Loading...</div>);
+
+  (async () => {
+    stream.update(<div>Processing...</div>);
+    await delay(1000);
+    stream.update(<div>Almost done...</div>);
+    await delay(1000);
+    stream.done(<div>Complete!</div>);
+  })();
+
+  return stream.value;
+}
+```
+
+**Key Methods:**
+
+- **`update(node)`**: Replace the current UI node
+- **`append(node)`**: Append a new UI node
+- **`done(node?)`**: Finalize the stream (required)
+- **`error(error)`**: Signal an error
+
+<Warning>
+  You must always call `.done()` to finalize the stream, otherwise the UI will remain in a loading state.
+</Warning>
+
+### createStreamableValue
+
+`createStreamableValue` creates a streamable primitive value (strings, numbers, objects).
+
+```tsx file="app/actions.tsx"
+'use server';
+
+import { createStreamableValue } from '@ai-sdk/rsc';
+
+export async function generateCounter() {
+  const stream = createStreamableValue(0);
+
+  (async () => {
+    for (let i = 1; i <= 10; i++) {
+      await delay(100);
+      stream.update(i);
+    }
+    stream.done();
+  })();
+
+  return stream.value;
+}
+```
+
+**Reading on the Client:**
+
+```tsx file="app/page.tsx"
+'use client';
+
+import { useStreamableValue } from '@ai-sdk/rsc';
+
+export default function Counter({ streamableValue }) {
+  const [value, error] = useStreamableValue(streamableValue);
+
+  if (error) return <div>Error: {error.message}</div>;
+  return <div>Count: {value}</div>;
+}
+```
+
+## Streaming with streamUI
+
+The `streamUI` function integrates streaming components with language models.
+
+### Text Streaming
+
+Stream text content as React components:
+
+```tsx file="app/actions.tsx"
+'use server';
+
+import { streamUI } from '@ai-sdk/rsc';
+import { openai } from '@ai-sdk/openai';
+
+export async function generateResponse(prompt: string) {
+  const result = await streamUI({
+    model: openai('gpt-4'),
+    prompt,
+    text: ({ content, done }) => {
+      return (
+        <div>
+          <p>{content}</p>
+          {!done && <span className="cursor">▊</span>}
+        </div>
+      );
+    },
+  });
+
+  return result.value;
+}
+```
+
+### Progressive Tool Rendering
+
+Render components as tools are called:
+
+```tsx file="app/actions.tsx"
+'use server';
+
+import { streamUI } from '@ai-sdk/rsc';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+export async function searchAndDisplay(query: string) {
+  const result = await streamUI({
+    model: openai('gpt-4'),
+    prompt: query,
+    text: ({ content }) => <div>{content}</div>,
+    tools: {
+      search: {
+        description: 'Search for information',
+        inputSchema: z.object({
+          query: z.string(),
+        }),
+        generate: async function* ({ query }) {
+          yield <div>Searching for {query}...</div>;
+          
+          const results = await performSearch(query);
+          
+          yield (
+            <div>
+              <h3>Results for {query}</h3>
+              <ul>
+                {results.map((r, i) => (
+                  <li key={i}>{r.title}</li>
+                ))}
+              </ul>
+            </div>
+          );
+          
+          return <div>Search complete</div>;
+        },
+      },
+    },
+  });
+
+  return result.value;
+}
+```
+
+## Generator Functions
+
+Use async generators to stream multiple updates:
+
+```tsx
+generate: async function* ({ location }) {
+  // Initial loading state
+  yield <Skeleton />;
+  
+  // Fetch data
+  const data = await fetchWeather(location);
+  
+  // Intermediate state
+  yield <PartialWeather data={data} />;
+  
+  // Final state
+  return <CompleteWeather data={data} />;
+}
+```
+
+## Reading Streamable Values
+
+### Using Hooks (Client Components)
+
+```tsx
+'use client';
+
+import { useStreamableValue } from '@ai-sdk/rsc';
+
+export function StreamDisplay({ stream }) {
+  const [value, error] = useStreamableValue(stream);
+  
+  if (error) return <Error error={error} />;
+  return <div>{value}</div>;
+}
+```
+
+### Without React
+
+```tsx
+import { readStreamableValue } from '@ai-sdk/rsc';
+
+for await (const value of readStreamableValue(stream)) {
+  console.log('Current value:', value);
+}
+```
+
+## Appending vs Updating
+
+### update()
+
+Replaces the current UI:
+
+```tsx
+const stream = createStreamableUI(<div>1</div>);
+stream.update(<div>2</div>); // Shows: 2
+stream.done();
+```
+
+### append()
+
+Adds to existing UI:
+
+```tsx
+const stream = createStreamableUI(<div>1</div>);
+stream.append(<div>2</div>); // Shows: 1 2
+stream.append(<div>3</div>); // Shows: 1 2 3
+stream.done();
+```
+
+## Error Handling
+
+Handle errors in streaming components:
+
+```tsx
+const stream = createStreamableUI();
+
+try {
+  const result = await riskyOperation();
+  stream.done(<Success data={result} />);
+} catch (error) {
+  stream.error(error);
+}
+```
+
+On the client:
+
+```tsx
+'use client';
+
+import { ErrorBoundary } from 'react-error-boundary';
+
+export function SafeStream({ children }) {
+  return (
+    <ErrorBoundary fallback={<div>Something went wrong</div>}>
+      {children}
+    </ErrorBoundary>
+  );
+}
+```
+
+## Best Practices
+
+### 1. Always Call done()
+
+```tsx
+// ❌ Bad - stream never closes
+const stream = createStreamableUI();
+stream.update(<div>Content</div>);
+return stream.value;
+
+// ✅ Good - stream properly closed
+const stream = createStreamableUI();
+stream.update(<div>Content</div>);
+stream.done();
+return stream.value;
+```
+
+### 2. Use Async Patterns
+
+```tsx
+// ✅ Good - non-blocking
+const stream = createStreamableUI(<Loading />);
+
+(async () => {
+  const data = await fetchData();
+  stream.done(<Result data={data} />);
+})();
+
+return stream.value;
+```
+
+### 3. Handle Errors Gracefully
+
+```tsx
+const stream = createStreamableUI(<Loading />);
+
+(async () => {
+  try {
+    const data = await fetchData();
+    stream.done(<Result data={data} />);
+  } catch (error) {
+    stream.error(error);
+  }
+})();
+
+return stream.value;
+```
+
+## Common Patterns
+
+### Progressive Enhancement
+
+```tsx
+export async function generateArticle(topic: string) {
+  const stream = createStreamableUI();
+
+  (async () => {
+    // 1. Show outline
+    stream.update(<Outline topic={topic} />);
+    
+    // 2. Generate content
+    const content = await generateContent(topic);
+    stream.update(<Article content={content} loading />);
+    
+    // 3. Add images
+    const images = await generateImages(topic);
+    stream.done(<Article content={content} images={images} />);
+  })();
+
+  return stream.value;
+}
+```
+
+### Multi-Step Workflows
+
+```tsx
+export async function analyzeData(data: any) {
+  const stream = createStreamableUI();
+
+  (async () => {
+    stream.append(<Step>Validating data...</Step>);
+    await validate(data);
+    
+    stream.append(<Step>Processing...</Step>);
+    const results = await process(data);
+    
+    stream.append(<Step>Generating visualization...</Step>);
+    const chart = await generateChart(results);
+    
+    stream.done(<Chart data={chart} />);
+  })();
+
+  return stream.value;
+}
+```
+
+## Next Steps
+
+- Learn about [Generative UI](/docs/ai-sdk-rsc/generative-ui) patterns
+- Explore the [`streamUI` API reference](/docs/reference/ai-sdk-rsc/stream-ui)
+- See [`createStreamableUI` API reference](/docs/reference/ai-sdk-rsc/create-streamable-ui)

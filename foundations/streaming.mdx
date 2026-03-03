@@ -1,0 +1,310 @@
+---
+title: Streaming
+description: Why use streaming for AI applications?
+---
+
+Streaming conversational text UIs (like ChatGPT) have gained massive popularity. This section explores the benefits of streaming compared to blocking interfaces.
+
+Large language models (LLMs) are extremely powerful. However, when generating long outputs, they can be very slow compared to the latency you're likely used to. If you build a traditional blocking UI, your users might find themselves staring at loading spinners for 5, 10, even up to 40 seconds waiting for the entire LLM response to be generated. This can lead to a poor user experience, especially in conversational applications like chatbots.
+
+Streaming UIs can help mitigate this issue by **displaying parts of the response as they become available**.
+
+## Streaming vs blocking
+
+### Blocking approach
+
+With blocking generation, the entire response must be generated before anything is displayed:
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-4'),
+  prompt: 'Write a detailed essay about the history of the internet.',
+});
+
+// User waits 10+ seconds before seeing anything
+console.log(result.text);
+```
+
+### Streaming approach
+
+With streaming, text appears incrementally as it's generated:
+
+```ts
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = streamText({
+  model: openai('gpt-4'),
+  prompt: 'Write a detailed essay about the history of the internet.',
+});
+
+// User sees text appearing in real-time
+for await (const textPart of result.textStream) {
+  process.stdout.write(textPart);
+}
+```
+
+## Streaming implementation
+
+The AI SDK makes streaming straightforward:
+
+### Text streaming
+
+Stream text as it's generated:
+
+```ts
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = streamText({
+  model: openai('gpt-4'),
+  prompt: 'Write a poem about embedding models.',
+});
+
+// Consume the text stream
+for await (const textPart of result.textStream) {
+  process.stdout.write(textPart);
+}
+```
+
+### Full stream
+
+Access all stream parts including metadata:
+
+```ts
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = streamText({
+  model: openai('gpt-4'),
+  prompt: 'Explain quantum computing.',
+});
+
+for await (const part of result.fullStream) {
+  switch (part.type) {
+    case 'text-delta':
+      process.stdout.write(part.text);
+      break;
+    case 'finish':
+      console.log('\nFinish reason:', part.finishReason);
+      console.log('Usage:', part.usage);
+      break;
+  }
+}
+```
+
+### Stream to response
+
+In a web server, stream directly to an HTTP response:
+
+```ts
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+export async function POST(req: Request) {
+  const { prompt } = await req.json();
+  
+  const result = streamText({
+    model: openai('gpt-4'),
+    prompt,
+  });
+  
+  return result.toDataStreamResponse();
+}
+```
+
+## Stream types
+
+The `streamText` function returns multiple stream types:
+
+### textStream
+
+Only the generated text:
+
+```ts
+const result = streamText({
+  model: openai('gpt-4'),
+  prompt: 'Hello',
+});
+
+for await (const text of result.textStream) {
+  console.log(text); // 'Hello', ' there', '!'
+}
+```
+
+### fullStream
+
+All stream parts with metadata:
+
+```ts
+for await (const part of result.fullStream) {
+  console.log(part);
+  // { type: 'text-delta', text: 'Hello' }
+  // { type: 'text-delta', text: ' there' }
+  // { type: 'finish', finishReason: 'stop', usage: {...} }
+}
+```
+
+### toDataStream
+
+A web-compatible stream:
+
+```ts
+const stream = result.toDataStream();
+const response = new Response(stream);
+```
+
+## Streaming with tools
+
+Stream tool calls and results:
+
+```ts
+import { streamText, tool } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const result = streamText({
+  model: openai('gpt-4'),
+  tools: {
+    weather: tool({
+      description: 'Get the weather in a location',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      execute: async ({ location }) => ({
+        location,
+        temperature: 72,
+      }),
+    }),
+  },
+  prompt: 'What is the weather in San Francisco?',
+});
+
+for await (const part of result.fullStream) {
+  switch (part.type) {
+    case 'text-delta':
+      process.stdout.write(part.text);
+      break;
+    case 'tool-call':
+      console.log('\nTool call:', part.toolName, part.input);
+      break;
+    case 'tool-result':
+      console.log('Tool result:', part.output);
+      break;
+  }
+}
+```
+
+## Stream callbacks
+
+Handle stream events with callbacks:
+
+```ts
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = streamText({
+  model: openai('gpt-4'),
+  prompt: 'Write a story',
+  onChunk({ chunk }) {
+    console.log('Received chunk:', chunk);
+  },
+  onFinish({ text, usage }) {
+    console.log('Generation finished');
+    console.log('Total text:', text);
+    console.log('Token usage:', usage);
+  },
+});
+```
+
+## Consuming streams
+
+Multiple ways to consume the stream:
+
+### Async iteration
+
+```ts
+for await (const textPart of result.textStream) {
+  process.stdout.write(textPart);
+}
+```
+
+### Promise-based
+
+Wait for the complete result:
+
+```ts
+const result = streamText({
+  model: openai('gpt-4'),
+  prompt: 'Hello',
+});
+
+const { text, usage } = await result;
+console.log(text);
+console.log(usage);
+```
+
+### Response streaming
+
+Stream to an HTTP response:
+
+```ts
+const result = streamText({
+  model: openai('gpt-4'),
+  prompt: 'Hello',
+});
+
+return result.toDataStreamResponse();
+```
+
+## Performance considerations
+
+Streaming provides better perceived performance:
+
+- **Immediate feedback**: Users see responses start appearing within 1-2 seconds instead of waiting 10+ seconds
+- **Progressive disclosure**: Long responses become readable before they're complete
+- **Better UX**: Loading indicators can be replaced with actual content
+
+However, if you can achieve your desired functionality using a smaller, faster model without streaming, that route can often lead to simpler development processes.
+
+## When to use streaming
+
+Use streaming when:
+
+- Generating long-form content (essays, articles, stories)
+- Building chat interfaces
+- Responses take more than a few seconds
+- You want to show progress to users
+
+Use blocking generation when:
+
+- Responses are short and fast (< 2 seconds)
+- You need the complete response before processing
+- Building batch processing systems
+- Simplicity is more important than perceived speed
+
+## Stream abortion
+
+Cancel streams using abort signals:
+
+```ts
+const abortController = new AbortController();
+
+const result = streamText({
+  model: openai('gpt-4'),
+  prompt: 'Write a long story',
+  abortSignal: abortController.signal,
+});
+
+// Cancel after 5 seconds
+setTimeout(() => abortController.abort(), 5000);
+
+for await (const textPart of result.textStream) {
+  process.stdout.write(textPart);
+}
+```
+
+For an introduction to streaming UIs and the AI SDK, check out our [getting started guides](/docs/getting-started).

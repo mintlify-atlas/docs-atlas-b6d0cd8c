@@ -1,0 +1,180 @@
+---
+title: AI SDK UI Overview
+description: Framework-agnostic UI toolkit for building AI-powered chat, completion, and streaming interfaces with React, Vue, Svelte, and more.
+---
+
+# AI SDK UI
+
+AI SDK UI is designed to help you build interactive chat, completion, and assistant applications with ease. It is a **framework-agnostic toolkit**, streamlining the integration of advanced AI functionalities into your applications.
+
+AI SDK UI provides robust abstractions that simplify the complex tasks of managing chat streams and UI updates on the frontend, enabling you to develop dynamic AI-driven interfaces more efficiently. With three main hooks — **`useChat`**, **`useCompletion`**, and **`useObject`** — you can incorporate real-time chat capabilities, text completions, streamed JSON, and interactive assistant features into your app.
+
+- **[`useChat`](/ai-sdk-ui/chatbot)** offers real-time streaming of chat messages, abstracting state management for inputs, messages, loading, and errors, allowing for seamless integration into any UI design.
+- **[`useCompletion`](/ai-sdk-ui/completion)** enables you to handle text completions in your applications, managing the prompt input and automatically updating the UI as new completions are streamed.
+- **[`useObject`](/ai-sdk-ui/object-generation)** is a hook that allows you to consume streamed JSON objects, providing a simple way to handle and display structured data in your application.
+
+These hooks are designed to reduce the complexity and time required to implement AI interactions, letting you focus on creating exceptional user experiences.
+
+## UI Framework Support
+
+AI SDK UI supports the following frameworks: [React](https://react.dev/), [Svelte](https://svelte.dev/), [Vue.js](https://vuejs.org/),
+[Angular](https://angular.dev/), and [SolidJS](https://www.solidjs.com/).
+
+Here is a comparison of the supported functions across these frameworks:
+
+| Framework | useChat | useCompletion | useObject |
+| --------- | ------- | ------------- | --------- |
+| React `@ai-sdk/react` | ✓ | ✓ | ✓ |
+| Vue.js `@ai-sdk/vue` | ✓ | ✓ | ✓ |
+| Svelte `@ai-sdk/svelte` | ✓ Chat | ✓ Completion | ✓ StructuredObject |
+| Angular `@ai-sdk/angular` | ✓ Chat | ✓ Completion | ✓ StructuredObject |
+| SolidJS (community) | ✓ | ✓ | ✓ |
+
+## Framework Examples
+
+Explore these example implementations for different frameworks:
+
+- [**Next.js**](https://github.com/vercel/ai/tree/main/examples/next-openai)
+- [**Nuxt**](https://github.com/vercel/ai/tree/main/examples/nuxt-openai)
+- [**SvelteKit**](https://github.com/vercel/ai/tree/main/examples/sveltekit-openai)
+- [**Angular**](https://github.com/vercel/ai/tree/main/examples/angular)
+
+## Core Features
+
+### Chat Interfaces
+
+Build full-featured chatbots with:
+- Real-time message streaming
+- Tool calling and execution
+- Message persistence and resumable streams
+- File attachments and multi-modal content
+- Custom metadata and data streaming
+
+Learn more in the [Chatbot guide](/ai-sdk-ui/chatbot).
+
+### Text Completions
+
+Create autocomplete and text generation interfaces:
+- Streaming text generation
+- Customizable prompts
+- Loading and error states
+- Input management
+
+Learn more in the [Completion guide](/ai-sdk-ui/completion).
+
+### Structured Data
+
+Generate and stream structured JSON objects:
+- Type-safe schema validation
+- Partial object streaming
+- Real-time UI updates
+- Enum classification
+
+Learn more in the [Object Generation guide](/ai-sdk-ui/object-generation).
+
+## Key Concepts
+
+### Transport System
+
+Customize how messages are sent to your API with the transport system. Choose from:
+- `DefaultChatTransport` for HTTP-based communication
+- `DirectChatTransport` for in-process agent calls
+- `TextStreamChatTransport` for plain text streams
+- Custom transports for WebSockets or other protocols
+
+Learn more in the [Transport guide](/ai-sdk-ui/transport).
+
+### Stream Protocol
+
+AI SDK UI supports multiple streaming protocols:
+- **UI Message Stream Protocol**: Full-featured protocol with tool calls, metadata, and custom data
+- **Text Stream Protocol**: Simple plain text streaming
+
+Learn more in the [Stream Protocol guide](/ai-sdk-ui/stream-protocol).
+
+### Error Handling
+
+Robust error handling with:
+- Error state management
+- Retry functionality
+- Custom error callbacks
+- Generic error messages for security
+
+Learn more in the [Error Handling guide](/ai-sdk-ui/error-handling).
+
+## Getting Started
+
+Install the AI SDK for your framework:
+
+```bash
+npm install ai @ai-sdk/react
+```
+
+Create a simple chat interface:
+
+```tsx
+'use client';
+
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
+import { useState } from 'react';
+
+export default function Chat() {
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: '/api/chat',
+    }),
+  });
+  const [input, setInput] = useState('');
+
+  return (
+    <div>
+      {messages.map(message => (
+        <div key={message.id}>
+          {message.role === 'user' ? 'User: ' : 'AI: '}
+          {message.parts.map((part, index) =>
+            part.type === 'text' ? <span key={index}>{part.text}</span> : null,
+          )}
+        </div>
+      ))}
+
+      <form
+        onSubmit={e => {
+          e.preventDefault();
+          if (input.trim()) {
+            sendMessage({ text: input });
+            setInput('');
+          }
+        }}
+      >
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          disabled={status !== 'ready'}
+          placeholder="Say something..."
+        />
+        <button type="submit" disabled={status !== 'ready'}>
+          Submit
+        </button>
+      </form>
+    </div>
+  );
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Build a Chatbot" icon="comments" href="/ai-sdk-ui/chatbot">
+    Learn how to build interactive chatbots with useChat
+  </Card>
+  <Card title="Text Completion" icon="pen-to-square" href="/ai-sdk-ui/completion">
+    Create text completion interfaces with useCompletion
+  </Card>
+  <Card title="Object Generation" icon="brackets-curly" href="/ai-sdk-ui/object-generation">
+    Stream structured JSON objects with useObject
+  </Card>
+  <Card title="Streaming Data" icon="water" href="/ai-sdk-ui/streaming-data">
+    Stream custom data alongside AI responses
+  </Card>
+</CardGroup>

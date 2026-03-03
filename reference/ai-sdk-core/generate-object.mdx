@@ -1,0 +1,244 @@
+---
+title: generateObject
+description: API reference for the generateObject function
+---
+
+Generates a structured, typed object for a given prompt and schema using a language model.
+
+This function does not stream the output. If you want to stream the output, use [`streamObject`](/reference/ai-sdk-core/stream-object) instead.
+
+<Note>
+  `generateObject` is deprecated. Use [`generateText`](/reference/ai-sdk-core/generate-text) with an `output` setting instead.
+</Note>
+
+```typescript
+import { generateObject } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const result = await generateObject({
+  model: openai('gpt-4-turbo'),
+  schema: z.object({
+    name: z.string(),
+    age: z.number(),
+  }),
+  prompt: 'Generate a person profile',
+});
+
+console.log(result.object);
+```
+
+## Parameters
+
+<ParamField path="model" type="LanguageModel" required>
+  The language model to use.
+</ParamField>
+
+<ParamField path="schema" type="FlexibleSchema">
+  The schema of the object that the model should generate.
+  Required unless using `output: 'enum'` or `output: 'no-schema'`.
+</ParamField>
+
+<ParamField path="schemaName" type="string">
+  Optional name of the output that should be generated.
+  Used by some providers for additional LLM guidance, e.g., via tool or schema name.
+</ParamField>
+
+<ParamField path="schemaDescription" type="string">
+  Optional description of the output that should be generated.
+  Used by some providers for additional LLM guidance, e.g., via tool or schema description.
+</ParamField>
+
+<ParamField path="output" type="'object' | 'array' | 'enum' | 'no-schema'">
+  The type of the output.
+  - `'object'`: The output is an object.
+  - `'array'`: The output is an array.
+  - `'enum'`: The output is an enum.
+  - `'no-schema'`: The output is not a schema.
+</ParamField>
+
+<ParamField path="enum" type="Array<string>">
+  The enum values that the model should use. Required when `output: 'enum'`.
+</ParamField>
+
+<ParamField path="prompt" type="string">
+  A simple text prompt. You can either use `prompt` or `messages` but not both.
+</ParamField>
+
+<ParamField path="messages" type="Array<CoreMessage>">
+  A list of messages. You can either use `prompt` or `messages` but not both.
+</ParamField>
+
+<ParamField path="system" type="string">
+  A system message that will be part of the prompt.
+</ParamField>
+
+<ParamField path="maxOutputTokens" type="number">
+  Maximum number of tokens to generate.
+</ParamField>
+
+<ParamField path="temperature" type="number">
+  Temperature setting. The value is passed through to the provider. The range depends on the provider and model.
+  It is recommended to set either `temperature` or `topP`, but not both.
+</ParamField>
+
+<ParamField path="topP" type="number">
+  Nucleus sampling. The value is passed through to the provider. The range depends on the provider and model.
+  It is recommended to set either `temperature` or `topP`, but not both.
+</ParamField>
+
+<ParamField path="topK" type="number">
+  Only sample from the top K options for each subsequent token.
+  Used to remove "long tail" low probability responses.
+  Recommended for advanced use cases only. You usually only need to use temperature.
+</ParamField>
+
+<ParamField path="presencePenalty" type="number">
+  Presence penalty setting.
+  It affects the likelihood of the model to repeat information that is already in the prompt.
+  The value is passed through to the provider. The range depends on the provider and model.
+</ParamField>
+
+<ParamField path="frequencyPenalty" type="number">
+  Frequency penalty setting.
+  It affects the likelihood of the model to repeatedly use the same words or phrases.
+  The value is passed through to the provider. The range depends on the provider and model.
+</ParamField>
+
+<ParamField path="seed" type="number">
+  The seed (integer) to use for random sampling.
+  If set and supported by the model, calls will generate deterministic results.
+</ParamField>
+
+<ParamField path="maxRetries" type="number" default="2">
+  Maximum number of retries. Set to 0 to disable retries.
+</ParamField>
+
+<ParamField path="abortSignal" type="AbortSignal">
+  An optional abort signal that can be used to cancel the call.
+</ParamField>
+
+<ParamField path="headers" type="Record<string, string>">
+  Additional HTTP headers to be sent with the request. Only applicable for HTTP-based providers.
+</ParamField>
+
+<ParamField path="experimental_repairText" type="RepairTextFunction">
+  A function that attempts to repair the raw output of the model to enable JSON parsing.
+</ParamField>
+
+<ParamField path="experimental_download" type="DownloadFunction">
+  Custom download function to use for URLs.
+  By default, files are downloaded if the model does not support the URL for the given media type.
+</ParamField>
+
+<ParamField path="experimental_telemetry" type="TelemetrySettings">
+  Optional telemetry configuration (experimental).
+</ParamField>
+
+<ParamField path="providerOptions" type="ProviderOptions">
+  Additional provider-specific options. They are passed through to the provider from the AI SDK
+  and enable provider-specific functionality that can be fully encapsulated in the provider.
+</ParamField>
+
+## Returns
+
+<ResponseField name="object" type="RESULT">
+  The generated object (typed according to the schema).
+</ResponseField>
+
+<ResponseField name="reasoning" type="string | undefined">
+  The reasoning text if the model supports reasoning output.
+</ResponseField>
+
+<ResponseField name="finishReason" type="FinishReason">
+  The reason why the generation finished.
+</ResponseField>
+
+<ResponseField name="usage" type="LanguageModelUsage">
+  The token usage of the generated response.
+</ResponseField>
+
+<ResponseField name="warnings" type="Array<CallWarning>">
+  Warnings from the model provider (e.g., unsupported settings).
+</ResponseField>
+
+<ResponseField name="response" type="LanguageModelResponseMetadata">
+  Response metadata.
+</ResponseField>
+
+<ResponseField name="request" type="LanguageModelRequestMetadata">
+  Request metadata.
+</ResponseField>
+
+<ResponseField name="providerMetadata" type="ProviderMetadata">
+  Additional provider-specific metadata.
+</ResponseField>
+
+<ResponseField name="toJsonResponse" type="(init?: ResponseInit) => Response">
+  Converts the object to a JSON response.
+</ResponseField>
+
+## Examples
+
+### Object generation
+
+```typescript
+import { generateObject } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const result = await generateObject({
+  model: openai('gpt-4-turbo'),
+  schema: z.object({
+    name: z.string(),
+    age: z.number(),
+    occupation: z.string(),
+  }),
+  prompt: 'Generate a person profile for a software engineer',
+});
+
+console.log(result.object);
+// { name: 'John Doe', age: 30, occupation: 'Software Engineer' }
+```
+
+### Array generation
+
+```typescript
+import { generateObject } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const result = await generateObject({
+  model: openai('gpt-4-turbo'),
+  output: 'array',
+  schema: z.object({
+    name: z.string(),
+    color: z.string(),
+  }),
+  prompt: 'Generate 3 fruit names with their colors',
+});
+
+console.log(result.object);
+// [
+//   { name: 'Apple', color: 'red' },
+//   { name: 'Banana', color: 'yellow' },
+//   { name: 'Orange', color: 'orange' },
+// ]
+```
+
+### Enum generation
+
+```typescript
+import { generateObject } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateObject({
+  model: openai('gpt-4-turbo'),
+  output: 'enum',
+  enum: ['action', 'comedy', 'drama', 'horror', 'sci-fi'],
+  prompt: 'Classify this movie: Inception',
+});
+
+console.log(result.object);
+// 'sci-fi'
+```

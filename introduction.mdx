@@ -1,0 +1,233 @@
+---
+title: AI SDK by Vercel
+description: The TypeScript toolkit for building AI applications and agents with React, Next.js, Vue, Svelte, Node.js, and more.
+---
+
+# AI SDK by Vercel
+
+The AI SDK is the TypeScript toolkit designed to help developers build AI-powered applications and agents with React, Next.js, Vue, Svelte, Node.js, and more.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Get started by installing the AI SDK in your project
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build your first AI application in minutes
+  </Card>
+  <Card title="AI SDK Core" icon="code" href="/ai-sdk-core">
+    Generate text, structured objects, and build agents with LLMs
+  </Card>
+  <Card title="AI SDK UI" icon="browser" href="/ai-sdk-ui">
+    Framework-agnostic hooks for chat and generative interfaces
+  </Card>
+</CardGroup>
+
+## Why use the AI SDK?
+
+Integrating large language models (LLMs) into applications is complicated and heavily dependent on the specific model provider you use.
+
+The AI SDK standardizes integrating artificial intelligence (AI) models across supported providers. This enables developers to focus on building great AI applications, not waste time on technical details.
+
+### Unified API across providers
+
+Switch between different AI providers with minimal code changes. The AI SDK provides a consistent interface whether you're using OpenAI, Anthropic, Google, or other providers:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
+
+// Use OpenAI
+const result1 = await generateText({
+  model: openai('gpt-4o'),
+  prompt: 'What is an agent?',
+});
+
+// Switch to Anthropic with the same code structure
+const result2 = await generateText({
+  model: anthropic('claude-sonnet-4-5'),
+  prompt: 'What is an agent?',
+});
+```
+
+### Or use Vercel AI Gateway
+
+The Vercel AI Gateway provides instant access to all major providers with a single API key:
+
+```typescript
+import { generateText } from 'ai';
+
+// Access any model with a simple string
+const result = await generateText({
+  model: 'openai/gpt-4o',
+  prompt: 'What is an agent?',
+});
+```
+
+## Core capabilities
+
+The AI SDK has two main libraries:
+
+<CardGroup cols={2}>
+  <Card title="AI SDK Core" icon="code">
+    A unified API for generating text, structured objects, tool calls, and building agents with LLMs.
+  </Card>
+  <Card title="AI SDK UI" icon="browser">
+    Framework-agnostic hooks for quickly building chat and generative user interfaces.
+  </Card>
+</CardGroup>
+
+### Generate text
+
+Generate text completions with streaming support:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { text } = await generateText({
+  model: openai('gpt-4o'),
+  prompt: 'What is an agent?',
+});
+```
+
+### Generate structured data
+
+Generate type-safe structured outputs using Zod schemas:
+
+```typescript
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const { output } = await generateText({
+  model: openai('gpt-4o'),
+  output: Output.object({
+    schema: z.object({
+      recipe: z.object({
+        name: z.string(),
+        ingredients: z.array(
+          z.object({ name: z.string(), amount: z.string() })
+        ),
+        steps: z.array(z.string()),
+      }),
+    }),
+  }),
+  prompt: 'Generate a lasagna recipe.',
+});
+```
+
+### Build agents with tools
+
+Create agents that can use tools to accomplish tasks:
+
+```typescript
+import { generateText, tool } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const result = await generateText({
+  model: openai('gpt-4o'),
+  tools: {
+    weather: tool({
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      execute: async ({ location }) => {
+        // Call weather API
+        return { temperature: 72, condition: 'sunny' };
+      },
+    }),
+  },
+  prompt: 'What is the weather in San Francisco?',
+});
+```
+
+### Stream text and UI
+
+Stream responses for real-time user interfaces:
+
+```typescript
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = streamText({
+  model: openai('gpt-4o'),
+  prompt: 'Invent a new holiday and describe its traditions.',
+});
+
+for await (const chunk of result.textStream) {
+  console.log(chunk);
+}
+```
+
+## Supported providers
+
+The AI SDK supports multiple model providers out of the box:
+
+<CardGroup cols={3}>
+  <Card title="OpenAI" icon="openai">
+    GPT-4o, GPT-4, GPT-3.5 Turbo
+  </Card>
+  <Card title="Anthropic" icon="anthropic">
+    Claude 4.5, Claude 3.5 Sonnet
+  </Card>
+  <Card title="Google" icon="google">
+    Gemini 2.5 Flash, Gemini Pro
+  </Card>
+  <Card title="Mistral" icon="mistral">
+    Mistral Large, Mistral Medium
+  </Card>
+  <Card title="Meta" icon="meta">
+    Llama 3.3, Llama 3.1
+  </Card>
+  <Card title="And more" icon="ellipsis">
+    Amazon Bedrock, Azure, Cohere, and custom providers
+  </Card>
+</CardGroup>
+
+## Framework integrations
+
+Build AI applications with your favorite framework:
+
+<CardGroup cols={2}>
+  <Card title="Next.js" icon="nextjs">
+    React Server Components and App Router support
+  </Card>
+  <Card title="React" icon="react">
+    Hooks for building chat interfaces
+  </Card>
+  <Card title="Vue" icon="vue">
+    Composables for Vue 3 applications
+  </Card>
+  <Card title="Svelte" icon="svelte">
+    Stores and utilities for Svelte apps
+  </Card>
+  <Card title="Node.js" icon="node">
+    Express, Fastify, and native HTTP support
+  </Card>
+  <Card title="Angular" icon="angular">
+    Services for Angular applications
+  </Card>
+</CardGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Install the SDK" icon="download" href="/installation">
+    Set up the AI SDK in your project
+  </Card>
+  <Card title="Build your first app" icon="rocket" href="/quickstart">
+    Follow the quickstart guide
+  </Card>
+  <Card title="Explore providers" icon="server" href="/providers">
+    Learn about available AI providers
+  </Card>
+  <Card title="API reference" icon="book" href="/reference">
+    Dive into the complete API documentation
+  </Card>
+</CardGroup>
+
+## Join our community
+
+If you have questions about anything related to the AI SDK, you're always welcome to ask our community on [the Vercel Community](https://community.vercel.com/c/ai-sdk/62).

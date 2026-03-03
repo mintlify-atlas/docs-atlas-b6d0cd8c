@@ -1,0 +1,177 @@
+---
+title: Overview
+description: An overview of AI SDK Core - the unified interface for working with large language models.
+---
+
+# AI SDK Core
+
+Large Language Models (LLMs) are advanced programs that can understand, create, and engage with human language on a large scale. They are trained on vast amounts of written material to recognize patterns in language and predict what might come next in a given piece of text.
+
+AI SDK Core **simplifies working with LLMs by offering a standardized way of integrating them into your app** - so you can focus on building great AI applications for your users, not waste time on technical details.
+
+## Why AI SDK Core?
+
+Working with different AI providers typically requires learning provider-specific APIs, handling various response formats, and managing different error patterns. AI SDK Core abstracts these differences away with a unified interface.
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
+
+// Same interface, different providers
+const result1 = await generateText({
+  model: openai('gpt-5'),
+  prompt: 'Explain quantum computing',
+});
+
+const result2 = await generateText({
+  model: anthropic('claude-4-sonnet'),
+  prompt: 'Explain quantum computing',
+});
+```
+
+## Core Functions
+
+AI SDK Core provides functions for different LLM use cases:
+
+### Text Generation
+
+- **`generateText`**: Generate text and tool calls in a single request. Ideal for non-interactive use cases like automation, batch processing, and agents.
+- **`streamText`**: Stream text and tool calls as they're generated. Perfect for interactive applications like chatbots and real-time interfaces.
+
+```typescript
+import { generateText, streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// Non-streaming generation
+const { text } = await generateText({
+  model: openai('gpt-5'),
+  prompt: 'Write a haiku about programming',
+});
+
+// Streaming generation
+const result = streamText({
+  model: openai('gpt-5'),
+  prompt: 'Write a story about a robot',
+});
+
+for await (const textPart of result.textStream) {
+  process.stdout.write(textPart);
+}
+```
+
+### Structured Data Generation
+
+Both `generateText` and `streamText` support structured output via the `output` property, allowing you to generate typed, schema-validated data:
+
+```typescript
+import { generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const { output } = await generateText({
+  model: openai('gpt-5'),
+  output: Output.object({
+    schema: z.object({
+      name: z.string(),
+      ingredients: z.array(z.string()),
+      steps: z.array(z.string()),
+    }),
+  }),
+  prompt: 'Generate a recipe for chocolate chip cookies',
+});
+
+// output is fully typed and validated
+console.log(output.name); // string
+console.log(output.ingredients); // string[]
+```
+
+### Tool Calling
+
+Tools allow models to perform actions or retrieve information:
+
+```typescript
+import { generateText, tool } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const { text } = await generateText({
+  model: openai('gpt-5'),
+  tools: {
+    weather: tool({
+      description: 'Get the weather for a location',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      execute: async ({ location }) => {
+        // Call weather API
+        return { temperature: 72, condition: 'sunny' };
+      },
+    }),
+  },
+  prompt: 'What\'s the weather in San Francisco?',
+});
+```
+
+## Key Features
+
+### Provider-Agnostic
+
+Switch between AI providers without changing your code. The same functions work with OpenAI, Anthropic, Google, and many others.
+
+### Type Safety
+
+Full TypeScript support with automatic type inference for tool inputs/outputs and structured data schemas.
+
+### Streaming Support
+
+Built-in streaming capabilities for real-time user experiences.
+
+### Multi-Step Execution
+
+Automatic handling of multi-turn tool calls and conversations.
+
+### Error Handling
+
+Consistent error handling across all providers with detailed error types.
+
+### Framework Integration
+
+Seamless integration with React, Vue, Svelte, and Next.js through AI SDK UI and AI SDK RSC.
+
+## Installation
+
+```bash
+npm install ai
+```
+
+Then install your preferred provider:
+
+```bash
+npm install @ai-sdk/openai
+# or
+npm install @ai-sdk/anthropic
+# or
+npm install @ai-sdk/google
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Generating Text" icon="text" href="/ai-sdk-core/generating-text">
+    Learn how to generate and stream text with AI SDK Core
+  </Card>
+  <Card title="Structured Data" icon="shapes" href="/ai-sdk-core/generating-structured-data">
+    Generate type-safe structured data from language models
+  </Card>
+  <Card title="Tool Calling" icon="wrench" href="/ai-sdk-core/tools-and-tool-calling">
+    Enable models to use tools and perform actions
+  </Card>
+  <Card title="Settings" icon="sliders" href="/ai-sdk-core/settings">
+    Configure model parameters and behavior
+  </Card>
+</CardGroup>
+
+## API Reference
+
+For detailed API documentation, see the [AI SDK Core API Reference](/docs/reference/ai-sdk-core).

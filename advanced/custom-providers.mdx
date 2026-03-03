@@ -1,0 +1,418 @@
+---
+title: Custom Providers
+description: Learn how to create custom AI providers that integrate with the AI SDK
+---
+
+# Custom Providers
+
+The AI SDK supports creating custom providers that implement the provider specification. This allows you to integrate any AI service or model with the unified AI SDK interface.
+
+## Provider Architecture
+
+The AI SDK uses a layered provider architecture:
+
+1. **Provider Specification** (`@ai-sdk/provider`): Defines interfaces like `LanguageModelV3`
+2. **Provider Utilities** (`@ai-sdk/provider-utils`): Shared utilities for implementing providers
+3. **Provider Implementation**: Your custom provider that implements the specification
+4. **Core Functions**: `generateText`, `streamText`, etc. that work with any provider
+
+## Creating a Language Model Provider
+
+### Basic Provider Structure
+
+A provider implements the `ProviderV3` interface:
+
+```ts file="my-provider.ts"
+import {
+  LanguageModelV3,
+  ProviderV3,
+} from '@ai-sdk/provider';
+import {
+  FetchFunction,
+  loadApiKey,
+  withoutTrailingSlash,
+} from '@ai-sdk/provider-utils';
+
+export interface MyProvider extends ProviderV3 {
+  (modelId: string): LanguageModelV3;
+  languageModel(modelId: string): LanguageModelV3;
+}
+
+export interface MyProviderSettings {
+  baseURL?: string;
+  apiKey?: string;
+  headers?: Record<string, string>;
+  fetch?: FetchFunction;
+}
+
+export function createMyProvider(
+  options: MyProviderSettings = {},
+): MyProvider {
+  const baseURL =
+    withoutTrailingSlash(options.baseURL) ?? 'https://api.example.com/v1';
+
+  const getHeaders = () => ({
+    Authorization: `Bearer ${loadApiKey({
+      apiKey: options.apiKey,
+      environmentVariableName: 'MY_PROVIDER_API_KEY',
+      description: 'My Provider',
+    })}`,
+    ...options.headers,
+  });
+
+  const createLanguageModel = (modelId: string) =>
+    new MyLanguageModel(modelId, {
+      provider: 'my-provider',
+      baseURL,
+      headers: getHeaders,
+      fetch: options.fetch,
+    });
+
+  const provider = function (modelId: string) {
+    if (new.target) {
+      throw new Error(
+        'The provider function cannot be called with the new keyword.',
+      );
+    }
+    return createLanguageModel(modelId);
+  };
+
+  provider.specificationVersion = 'v3' as const;
+  provider.languageModel = createLanguageModel;
+
+  return provider as MyProvider;
+}
+
+export const myProvider = createMyProvider();
+```
+
+### Implementing LanguageModelV3
+
+Implement the `LanguageModelV3` interface:
+
+```ts file="my-language-model.ts"
+import {
+  LanguageModelV3,
+  LanguageModelV3CallOptions,
+  LanguageModelV3StreamResult,
+} from '@ai-sdk/provider';
+import { FetchFunction } from '@ai-sdk/provider-utils';
+
+export class MyLanguageModel implements LanguageModelV3 {
+  readonly specificationVersion = 'v3' as const;
+  readonly provider: string;
+  readonly modelId: string;
+  readonly defaultObjectGenerationMode = 'json' as const;
+
+  private readonly config: {
+    baseURL: string;
+    headers: () => Record<string, string>;
+    fetch?: FetchFunction;
+  };
+
+  constructor(
+    modelId: string,
+    config: {
+      provider: string;
+      baseURL: string;
+      headers: () => Record<string, string>;
+      fetch?: FetchFunction;
+    },
+  ) {
+    this.modelId = modelId;
+    this.provider = config.provider;
+    this.config = config;
+  }
+
+  async doGenerate(
+    options: LanguageModelV3CallOptions,
+  ): Promise<LanguageModelV3GenerateResult> {
+    const { prompt, ...settings } = options;
+
+    const response = await this.callAPI({
+      messages: prompt.messages,
+      ...settings,
+    });
+
+    return {
+      text: response.choices[0].message.content,
+      finishReason: this.mapFinishReason(response.choices[0].finish_reason),
+      usage: {
+        inputTokens: response.usage.prompt_tokens,
+        outputTokens: response.usage.completion_tokens,
+      },
+    };
+  }
+
+  async doStream(
+    options: LanguageModelV3CallOptions,
+  ): Promise<LanguageModelV3StreamResult> {
+    const { prompt, ...settings } = options;
+
+    const response = await this.callAPI({
+      messages: prompt.messages,
+      stream: true,
+      ...settings,
+    });
+
+    return {
+      stream: this.createReadableStream(response),
+      rawCall: { rawPrompt: prompt, rawSettings: settings },
+    };
+  }
+
+  private async callAPI(body: any): Promise<any> {
+    const fetch = this.config.fetch ?? globalThis.fetch;
+
+    const response = await fetch(`${this.config.baseURL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.config.headers(),
+      },
+      body: JSON.stringify({
+        model: this.modelId,
+        ...body,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API call failed: ${response.statusText}`);
+    }
+
+    return body.stream ? response : response.json();
+  }
+
+  private createReadableStream(response: Response): ReadableStream {
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+
+    return new ReadableStream({
+      async start(controller) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n').filter(line => line.trim());
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+
+              const parsed = JSON.parse(data);
+              const delta = parsed.choices[0]?.delta;
+
+              if (delta?.content) {
+                controller.enqueue({
+                  type: 'text-delta',
+                  textDelta: delta.content,
+                });
+              }
+            }
+          }
+        }
+        controller.close();
+      },
+    });
+  }
+
+  private mapFinishReason(reason: string): 'stop' | 'length' | 'error' {
+    switch (reason) {
+      case 'stop': return 'stop';
+      case 'length': return 'length';
+      default: return 'error';
+    }
+  }
+}
+```
+
+## Using Provider Utilities
+
+### API Key Loading
+
+```ts
+import { loadApiKey, loadOptionalSetting } from '@ai-sdk/provider-utils';
+
+const apiKey = loadApiKey({
+  apiKey: options.apiKey,
+  environmentVariableName: 'MY_PROVIDER_API_KEY',
+  description: 'My Provider',
+});
+
+const baseURL = loadOptionalSetting({
+  settingValue: options.baseURL,
+  environmentVariableName: 'MY_PROVIDER_BASE_URL',
+});
+```
+
+### URL Handling
+
+```ts
+import { withoutTrailingSlash } from '@ai-sdk/provider-utils';
+
+const baseURL = withoutTrailingSlash(options.baseURL) ?? 'https://api.example.com';
+```
+
+### JSON Parsing
+
+```ts
+import { parseJSON, safeParseJSON } from '@ai-sdk/provider-utils';
+
+// Throws on invalid JSON
+const data = parseJSON({ text: jsonString });
+
+// Returns success/error result
+const result = await safeParseJSON({
+  text: jsonString,
+  schema: myZodSchema,
+});
+
+if (result.success) {
+  console.log(result.value);
+} else {
+  console.error(result.error);
+}
+```
+
+## Using Custom Providers
+
+### With Core Functions
+
+```ts
+import { generateText } from 'ai';
+import { myProvider } from './my-provider';
+
+const { text } = await generateText({
+  model: myProvider('my-model-name'),
+  prompt: 'Hello, world!',
+});
+```
+
+### With Middleware
+
+```ts
+import { wrapLanguageModel, defaultSettingsMiddleware } from 'ai';
+import { myProvider } from './my-provider';
+
+const model = wrapLanguageModel({
+  model: myProvider('my-model-name'),
+  middleware: defaultSettingsMiddleware({
+    settings: {
+      temperature: 0.7,
+      maxOutputTokens: 1000,
+    },
+  }),
+});
+
+const { text } = await generateText({
+  model,
+  prompt: 'Hello!',
+});
+```
+
+### In Provider Registry
+
+```ts
+import { createProviderRegistry } from 'ai';
+import { myProvider } from './my-provider';
+
+const registry = createProviderRegistry({
+  myProvider,
+});
+
+const model = registry.languageModel('myProvider:my-model-name');
+```
+
+## Best Practices
+
+### Provider Options
+
+Use `.optional()` for user-facing settings:
+
+```ts
+export interface MyProviderSettings {
+  baseURL?: string; // Optional, has default
+  apiKey?: string; // Optional, can come from env
+  temperature?: number; // Optional user preference
+}
+```
+
+Use `.nullish()` for API response schemas:
+
+```ts
+const responseSchema = z.object({
+  text: z.string(),
+  tokens: z.number().nullish(), // Provider might not include this
+});
+```
+
+### Error Handling
+
+```ts
+import { AISDKError } from '@ai-sdk/provider';
+
+export class MyProviderError extends AISDKError {
+  readonly provider = 'my-provider';
+  
+  constructor({ message, cause }: { message: string; cause?: unknown }) {
+    super({ name: 'MyProviderError', message, cause });
+  }
+}
+```
+
+### Fetch Middleware
+
+```ts
+export interface MyProviderSettings {
+  fetch?: FetchFunction;
+}
+
+// Users can provide custom fetch for logging, retries, etc.
+const provider = createMyProvider({
+  fetch: async (url, init) => {
+    console.log('Calling API:', url);
+    return fetch(url, init);
+  },
+});
+```
+
+## Testing Custom Providers
+
+```ts
+import { describe, it, expect, vi } from 'vitest';
+import { generateText } from 'ai';
+import { createMyProvider } from './my-provider';
+
+describe('My Provider', () => {
+  it('should generate text', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'Hello!' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 10, completion_tokens: 5 },
+      }),
+    });
+
+    const provider = createMyProvider({
+      apiKey: 'test-key',
+      fetch: mockFetch,
+    });
+
+    const { text } = await generateText({
+      model: provider('test-model'),
+      prompt: 'Hi',
+    });
+
+    expect(text).toBe('Hello!');
+    expect(mockFetch).toHaveBeenCalled();
+  });
+});
+```
+
+## Next Steps
+
+- Review the [OpenAI provider source](https://github.com/vercel/ai/tree/main/packages/openai/src)
+- Learn about [middleware implementation](/docs/advanced/middleware-implementation)
+- Explore [error recovery](/docs/advanced/error-recovery) patterns

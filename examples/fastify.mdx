@@ -1,0 +1,562 @@
+---
+title: Fastify with AI SDK
+description: Build high-performance AI-powered APIs with Fastify and the AI SDK
+---
+
+# Fastify with AI SDK
+
+Learn how to integrate the AI SDK into Fastify applications for high-performance AI endpoints.
+
+## Why Fastify?
+
+Fastify is an excellent choice for AI applications:
+
+- **Fast**: Low overhead framework optimized for speed
+- **Schema-based**: Built-in JSON schema validation
+- **Plugin System**: Extensible architecture
+- **TypeScript**: First-class TypeScript support
+- **Logging**: Built-in structured logging
+
+## Prerequisites
+
+- Node.js 18+
+- Basic knowledge of Fastify
+- Vercel AI Gateway API key
+
+## Quick Start
+
+Create a new project:
+
+```bash
+mkdir my-ai-server
+cd my-ai-server
+pnpm init
+```
+
+Install dependencies:
+
+```bash
+pnpm add fastify ai
+pnpm add -D tsx typescript
+```
+
+Configure TypeScript:
+
+```json filename="tsconfig.json"
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "outDir": "./dist",
+    "esModuleInterop": true,
+    "strict": true
+  }
+}
+```
+
+Set environment variables:
+
+```bash
+echo "AI_GATEWAY_API_KEY=your-api-key" > .env
+```
+
+## Basic Streaming
+
+Stream AI responses with Fastify:
+
+```ts filename="src/index.ts"
+import { streamText } from 'ai';
+import Fastify from 'fastify';
+import 'dotenv/config';
+
+const fastify = Fastify({ logger: true });
+
+fastify.post('/api/chat', async function (request, reply) {
+  const { prompt } = request.body as { prompt: string };
+
+  const result = streamText({
+    model: 'openai/gpt-4o',
+    prompt: prompt || 'Tell me a fun fact',
+  });
+
+  reply.header('Content-Type', 'text/plain; charset=utf-8');
+  return reply.send(result.toUIMessageStream());
+});
+
+fastify.listen({ port: 8080 }, (err) => {
+  if (err) throw err;
+  console.log('Server running on http://localhost:8080');
+});
+```
+
+Run the server:
+
+```bash
+pnpx tsx src/index.ts
+```
+
+Test with curl:
+
+```bash
+curl -X POST http://localhost:8080/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Why is the sky blue?"}'
+```
+
+## UI Message Stream
+
+Stream messages compatible with `useChat`:
+
+```ts filename="src/index.ts"
+import { streamText, convertToModelMessages, UIMessage } from 'ai';
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+
+const fastify = Fastify({ logger: true });
+
+await fastify.register(cors, {
+  origin: true,
+});
+
+fastify.post('/api/chat', async function (request, reply) {
+  const { messages } = request.body as { messages: UIMessage[] };
+
+  const result = streamText({
+    model: 'openai/gpt-4o',
+    messages: await convertToModelMessages(messages),
+  });
+
+  return reply.send(result.toUIMessageStreamResponse());
+});
+
+fastify.listen({ port: 8080 });
+```
+
+## Text-Only Stream
+
+Stream plain text responses:
+
+```ts filename="src/index.ts"
+import { streamText } from 'ai';
+import Fastify from 'fastify';
+
+const fastify = Fastify({ logger: true });
+
+fastify.post('/api/generate', async function (request, reply) {
+  const { prompt } = request.body as { prompt: string };
+
+  const result = streamText({
+    model: 'openai/gpt-4o',
+    prompt,
+  });
+
+  reply.header('Content-Type', 'text/plain; charset=utf-8');
+  return reply.send(result.textStream);
+});
+
+fastify.listen({ port: 8080 });
+```
+
+## Custom Data Streaming
+
+Send custom data with AI responses:
+
+```ts filename="src/index.ts"
+import { createUIMessageStream, streamText } from 'ai';
+import Fastify from 'fastify';
+
+const fastify = Fastify({ logger: true });
+
+fastify.post('/api/chat', async function (request, reply) {
+  const { prompt } = request.body as { prompt: string };
+
+  const stream = createUIMessageStream({
+    execute: async ({ writer }) => {
+      writer.write({ type: 'start' });
+
+      writer.write({
+        type: 'data-custom',
+        data: {
+          timestamp: new Date().toISOString(),
+          requestId: Math.random().toString(36),
+        },
+      });
+
+      const result = streamText({
+        model: 'openai/gpt-4o',
+        prompt,
+      });
+
+      writer.merge(result.toUIMessageStream({ sendStart: false }));
+    },
+    onError: error => {
+      return error instanceof Error ? error.message : String(error);
+    },
+  });
+
+  reply.header('Content-Type', 'text/plain; charset=utf-8');
+  return reply.send(stream);
+});
+
+fastify.listen({ port: 8080 });
+```
+
+## Tool Calling
+
+Implement AI tools with Fastify:
+
+```ts filename="src/index.ts"
+import {
+  streamText,
+  convertToModelMessages,
+  tool,
+  UIMessage,
+} from 'ai';
+import Fastify from 'fastify';
+import { z } from 'zod';
+
+const fastify = Fastify({ logger: true });
+
+fastify.post('/api/chat', async function (request, reply) {
+  const { messages } = request.body as { messages: UIMessage[] };
+
+  const result = streamText({
+    model: 'openai/gpt-4o',
+    messages: await convertToModelMessages(messages),
+    tools: {
+      getWeather: tool({
+        description: 'Get current weather for a city',
+        inputSchema: z.object({
+          city: z.string().describe('City name'),
+        }),
+        execute: async ({ city }) => {
+          const weatherData = {
+            city,
+            temperature: 72,
+            condition: 'Sunny',
+            humidity: 65,
+          };
+          return weatherData;
+        },
+      }),
+      searchWeb: tool({
+        description: 'Search the web for information',
+        inputSchema: z.object({
+          query: z.string(),
+        }),
+        execute: async ({ query }) => {
+          // Implement web search
+          return {
+            query,
+            results: [
+              { title: 'Result 1', url: 'https://example.com/1' },
+              { title: 'Result 2', url: 'https://example.com/2' },
+            ],
+          };
+        },
+      }),
+    },
+  });
+
+  return reply.send(result.toUIMessageStreamResponse());
+});
+
+fastify.listen({ port: 8080 });
+```
+
+## Structured Output
+
+Generate structured JSON with schema validation:
+
+```ts filename="src/index.ts"
+import { generateObject, Output } from 'ai';
+import Fastify from 'fastify';
+import { z } from 'zod';
+
+const fastify = Fastify({ logger: true });
+
+const recipeSchema = z.object({
+  name: z.string(),
+  ingredients: z.array(z.string()),
+  steps: z.array(z.string()),
+  prepTime: z.number(),
+  cookTime: z.number(),
+});
+
+fastify.post('/api/recipe', async function (request, reply) {
+  const { dish } = request.body as { dish: string };
+
+  const { object: recipe } = await generateObject({
+    model: 'openai/gpt-4o',
+    prompt: `Generate a recipe for ${dish}`,
+    output: Output.object({
+      schema: recipeSchema,
+    }),
+  });
+
+  return reply.send(recipe);
+});
+
+fastify.listen({ port: 8080 });
+```
+
+## Schema Validation
+
+Use Fastify's built-in schema validation:
+
+```ts filename="src/index.ts"
+import { streamText } from 'ai';
+import Fastify from 'fastify';
+
+const fastify = Fastify({ logger: true });
+
+fastify.post(
+  '/api/chat',
+  {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['prompt'],
+        properties: {
+          prompt: { type: 'string', minLength: 1, maxLength: 1000 },
+          temperature: { type: 'number', minimum: 0, maximum: 2 },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            text: { type: 'string' },
+          },
+        },
+      },
+    },
+  },
+  async function (request, reply) {
+    const { prompt, temperature } = request.body as {
+      prompt: string;
+      temperature?: number;
+    };
+
+    const result = streamText({
+      model: 'openai/gpt-4o',
+      prompt,
+      temperature,
+    });
+
+    return reply.send(result.toUIMessageStreamResponse());
+  },
+);
+
+fastify.listen({ port: 8080 });
+```
+
+## Plugins
+
+### Rate Limiting Plugin
+
+```ts filename="src/plugins/ratelimit.ts"
+import fp from 'fastify-plugin';
+import rateLimit from '@fastify/rate-limit';
+
+export default fp(async (fastify) => {
+  await fastify.register(rateLimit, {
+    max: 100,
+    timeWindow: '15 minutes',
+  });
+});
+```
+
+### Authentication Plugin
+
+```ts filename="src/plugins/auth.ts"
+import fp from 'fastify-plugin';
+
+export default fp(async (fastify) => {
+  fastify.decorate('authenticate', async (request, reply) => {
+    const apiKey = request.headers['x-api-key'];
+
+    if (!apiKey || apiKey !== process.env.API_KEY) {
+      reply.code(401).send({ error: 'Unauthorized' });
+    }
+  });
+});
+```
+
+Use plugins:
+
+```ts filename="src/index.ts"
+import Fastify from 'fastify';
+import ratelimitPlugin from './plugins/ratelimit';
+import authPlugin from './plugins/auth';
+
+const fastify = Fastify({ logger: true });
+
+await fastify.register(ratelimitPlugin);
+await fastify.register(authPlugin);
+
+fastify.post(
+  '/api/chat',
+  { onRequest: [fastify.authenticate] },
+  async (request, reply) => {
+    // Protected route
+  },
+);
+
+fastify.listen({ port: 8080 });
+```
+
+## Error Handling
+
+Global error handler:
+
+```ts filename="src/index.ts"
+import Fastify from 'fastify';
+
+const fastify = Fastify({ logger: true });
+
+fastify.setErrorHandler((error, request, reply) => {
+  request.log.error(error);
+
+  reply.status(error.statusCode || 500).send({
+    error: error.message,
+    statusCode: error.statusCode || 500,
+  });
+});
+
+fastify.post('/api/chat', async (request, reply) => {
+  try {
+    // AI logic
+  } catch (error) {
+    throw error;
+  }
+});
+
+fastify.listen({ port: 8080 });
+```
+
+## Production Setup
+
+### Project Structure
+
+```
+my-ai-server/
+├── src/
+│   ├── index.ts
+│   ├── routes/
+│   │   ├── chat.ts
+│   │   └── generate.ts
+│   ├── plugins/
+│   │   ├── auth.ts
+│   │   └── ratelimit.ts
+│   └── schemas/
+│       └── chat.ts
+├── .env
+├── package.json
+└── tsconfig.json
+```
+
+### Routes as Plugins
+
+```ts filename="src/routes/chat.ts"
+import { FastifyPluginAsync } from 'fastify';
+import { streamText } from 'ai';
+
+const chatRoutes: FastifyPluginAsync = async (fastify) => {
+  fastify.post('/chat', async (request, reply) => {
+    const { prompt } = request.body as { prompt: string };
+
+    const result = streamText({
+      model: 'openai/gpt-4o',
+      prompt,
+    });
+
+    return reply.send(result.toUIMessageStreamResponse());
+  });
+};
+
+export default chatRoutes;
+```
+
+```ts filename="src/index.ts"
+import Fastify from 'fastify';
+import chatRoutes from './routes/chat';
+import generateRoutes from './routes/generate';
+
+const fastify = Fastify({ logger: true });
+
+await fastify.register(chatRoutes, { prefix: '/api' });
+await fastify.register(generateRoutes, { prefix: '/api' });
+
+fastify.listen({ port: 8080 });
+```
+
+### Build Scripts
+
+```json filename="package.json"
+{
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest"
+  }
+}
+```
+
+## Deployment
+
+### Docker
+
+```dockerfile filename="Dockerfile"
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install --production
+
+COPY dist ./dist
+
+EXPOSE 8080
+
+CMD ["npm", "start"]
+```
+
+### Environment Variables
+
+```bash
+AI_GATEWAY_API_KEY=your-key
+API_KEY=your-auth-key
+PORT=8080
+NODE_ENV=production
+```
+
+## Performance Tips
+
+1. **Enable HTTP/2**: For better streaming performance
+2. **Use Async/Await**: Properly handle promises
+3. **Connection Pooling**: Reuse database connections
+4. **Caching**: Cache frequent responses
+5. **Compression**: Use for non-streaming routes
+
+## Best Practices
+
+1. **Use Plugins**: Modular architecture
+2. **Schema Validation**: Validate all inputs
+3. **Logging**: Use Fastify's built-in logger
+4. **Error Handling**: Centralized error handling
+5. **TypeScript**: Full type safety
+6. **Testing**: Write tests for routes
+
+## Example Repository
+
+View the complete example: [github.com/vercel/ai/examples/fastify](https://github.com/vercel/ai/tree/main/examples/fastify)
+
+## Resources
+
+- [Fastify Documentation](https://fastify.dev/)
+- [AI SDK Documentation](/docs)
+- [Fastify Plugins](https://fastify.dev/docs/latest/Reference/Plugins/)
+- [Schema Validation](https://fastify.dev/docs/latest/Reference/Validation-and-Serialization/)

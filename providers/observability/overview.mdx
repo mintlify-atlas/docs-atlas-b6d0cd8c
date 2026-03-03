@@ -1,0 +1,176 @@
+---
+title: Observability Integrations
+description: AI SDK Integration for monitoring and tracing LLM applications
+---
+
+# Observability Integrations
+
+Observability is crucial for understanding, debugging, and optimizing your AI-powered applications. The AI SDK provides built-in telemetry support that integrates with leading observability platforms, enabling you to monitor model performance, track costs, analyze user interactions, and identify issues in production.
+
+## Why Observability Matters
+
+As AI applications grow in complexity, observability becomes essential for:
+
+- **Performance Monitoring** - Track response times, token usage, and throughput
+- **Cost Management** - Monitor API costs across different models and providers
+- **Quality Assurance** - Evaluate output quality and identify issues
+- **Debugging** - Trace errors and unexpected behaviors through your application
+- **User Analytics** - Understand how users interact with your AI features
+- **Compliance** - Maintain audit trails for sensitive applications
+
+## How It Works
+
+The AI SDK emits telemetry data through OpenTelemetry-compatible traces and spans. Observability providers can consume this data to provide insights into your application's behavior.
+
+Most integrations work by configuring a telemetry exporter in your application:
+
+```ts
+import { createObservabilityProvider } from 'observability-provider';
+import { generateText } from 'ai';
+
+// Configure the observability provider
+const telemetry = createObservabilityProvider({
+  apiKey: process.env.OBSERVABILITY_API_KEY,
+});
+
+// Use AI SDK as normal - telemetry is automatically captured
+const result = await generateText({
+  model: yourModel,
+  prompt: 'Your prompt here',
+});
+```
+
+## Available Observability Providers
+
+Several LLM observability providers offer integrations with the AI SDK telemetry data:
+
+### Production-Ready Platforms
+
+- [Axiom](/providers/observability/axiom) - Serverless log analytics and observability
+- [Braintrust](/providers/observability/braintrust) - LLM evaluation and observability platform
+- [Confident AI](/providers/observability/confident-ai) - LLM testing and evaluation
+- [Helicone](/providers/observability/helicone) - Open-source LLM observability
+- [Langfuse](/providers/observability/langfuse) - Open-source LLM engineering platform
+- [LangSmith](/providers/observability/langsmith) - LangChain's observability platform
+- [Laminar](/providers/observability/laminar) - LLM observability and analytics
+- [LangWatch](/providers/observability/langwatch) - Conversation analytics for LLMs
+- [MLflow](/providers/observability/mlflow) - Open-source ML lifecycle platform
+- [Maxim](/providers/observability/maxim) - AI quality and safety platform
+- [Scorecard](/providers/observability/scorecard) - LLM evaluation and monitoring
+- [SigNoz](/providers/observability/signoz) - Open-source observability platform
+- [Traceloop](/providers/observability/traceloop) - OpenTelemetry for LLM applications
+- [Weave](/providers/observability/weave) - W&B's toolkit for LLM applications
+
+### Additional Integrations
+
+- [HoneyHive](https://docs.honeyhive.ai/integrations/vercel) - LLM evaluation and monitoring
+- [Sentry](https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/integrations/vercelai/) - Error tracking with AI SDK support
+- [Literal AI](https://docs.literalai.com/integrations/vercel-ai-sdk) - LLM monitoring through model wrappers
+
+## Key Features by Provider
+
+### Tracing & Logging
+
+All listed providers support comprehensive tracing and logging of AI SDK operations, including:
+
+- Request/response logging
+- Token usage tracking
+- Latency measurements
+- Error tracking
+
+### Evaluation & Testing
+
+Some providers specialize in evaluation:
+
+- **Braintrust** - Automated evaluations and prompt optimization
+- **Confident AI** - LLM testing frameworks
+- **Scorecard** - Quality scoring and monitoring
+- **Weave** - Evaluation workflows
+
+### Analytics & Dashboards
+
+Providers offering rich analytics:
+
+- **Axiom** - Real-time log analytics
+- **Langfuse** - Session tracking and user analytics
+- **LangWatch** - Conversation analytics
+- **Helicone** - Cost analytics and dashboards
+
+### Open Source Options
+
+If you prefer self-hosted solutions:
+
+- **Helicone** - Open-source observability
+- **Langfuse** - Open-source LLM engineering platform
+- **MLflow** - ML lifecycle management
+- **SigNoz** - Open-source APM and observability
+
+## Choosing a Provider
+
+When selecting an observability provider, consider:
+
+1. **Deployment Model** - Cloud-hosted vs. self-hosted
+2. **Pricing** - Based on volume, features, or seats
+3. **Features** - Tracing, evaluation, analytics, or all three
+4. **Integration Complexity** - SDK configuration vs. proxy setup
+5. **Data Privacy** - Where your data is stored and processed
+6. **Supported Models** - Compatibility with your AI providers
+
+## Getting Started
+
+Most observability integrations follow these steps:
+
+1. Sign up for the observability platform
+2. Install the provider's SDK or configure telemetry export
+3. Add configuration to your AI SDK application
+4. Deploy and start monitoring
+
+Each provider's documentation page includes specific setup instructions and examples.
+
+## Telemetry Data Structure
+
+The AI SDK emits structured telemetry including:
+
+- **Spans** - Individual operations (generate, stream, embed)
+- **Attributes** - Model ID, provider, settings, token counts
+- **Events** - Tool calls, errors, completions
+- **Metrics** - Duration, token usage, costs
+
+Observability providers parse this data to create insights, dashboards, and alerts.
+
+## Multiple Providers
+
+You can use multiple observability providers simultaneously for different purposes:
+
+```ts
+// Example: Use one for tracing, another for evaluation
+import { configureTelemetry } from 'ai';
+
+configureTelemetry({
+  exporters: [
+    createTracingExporter(),
+    createEvaluationExporter(),
+  ],
+});
+```
+
+## Best Practices
+
+1. **Start Simple** - Begin with basic tracing before adding advanced features
+2. **Sample in Production** - Use sampling to manage costs at scale
+3. **Set Alerts** - Configure alerts for errors, latency, and costs
+4. **Review Regularly** - Analyze traces and metrics weekly
+5. **Test Evaluations** - Validate evaluation criteria before relying on them
+6. **Document Baselines** - Track performance changes over time
+
+## Contributing
+
+<Note>
+Do you have an observability integration that supports the AI SDK and has an integration guide? Please open a pull request to add it to the list.
+</Note>
+
+## Learn More
+
+- [AI SDK Telemetry Documentation](/docs/ai-sdk-core/telemetry)
+- [OpenTelemetry Documentation](https://opentelemetry.io/)
+- Individual provider documentation pages (linked above)

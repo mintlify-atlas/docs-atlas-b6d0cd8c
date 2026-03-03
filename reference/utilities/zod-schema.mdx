@@ -1,0 +1,316 @@
+---
+title: zodSchema
+description: API reference for the zodSchema function
+---
+
+Creates a schema using a Zod schema definition with automatic type inference.
+
+This is the recommended way to define schemas in the AI SDK when using TypeScript.
+
+```typescript
+import { zodSchema } from 'ai';
+import { z } from 'zod';
+
+const schema = zodSchema(
+  z.object({
+    name: z.string(),
+    age: z.number(),
+  })
+);
+```
+
+## Parameters
+
+<ParamField path="zodSchema" type="z.ZodType<OBJECT>" required>
+  The Zod schema that defines the shape of the object.
+  
+  Supports both Zod v3 and Zod v4.
+</ParamField>
+
+<ParamField path="useReferences" type="boolean" default="false">
+  Enables support for references in the schema.
+  This is required for recursive schemas, e.g. with `z.lazy`.
+  
+  However, not all language models and providers support such references.
+</ParamField>
+
+## Returns
+
+Returns a `Schema<OBJECT>` that can be used with AI SDK functions. The type is automatically inferred from the Zod schema.
+
+## Examples
+
+### Basic Zod schema
+
+```typescript
+import { zodSchema } from 'ai';
+import { generateObject } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const personSchema = zodSchema(
+  z.object({
+    name: z.string().describe('The person\'s full name'),
+    age: z.number().describe('The person\'s age in years'),
+    occupation: z.string().optional().describe('The person\'s occupation'),
+  })
+);
+
+const result = await generateObject({
+  model: openai('gpt-4-turbo'),
+  schema: personSchema,
+  prompt: 'Generate a person profile',
+});
+
+// Type is automatically inferred:
+// result.object: {
+//   name: string;
+//   age: number;
+//   occupation?: string;
+// }
+```
+
+### With tool
+
+```typescript
+import { tool } from 'ai';
+import { zodSchema } from 'ai';
+import { z } from 'zod';
+
+const weatherTool = tool({
+  description: 'Get the weather for a location',
+  inputSchema: zodSchema(
+    z.object({
+      location: z.string().describe('City and state, e.g. San Francisco, CA'),
+      unit: z.enum(['celsius', 'fahrenheit']).default('fahrenheit'),
+    })
+  ),
+  execute: async ({ location, unit }) => {
+    const weather = await fetchWeather(location, unit);
+    return weather;
+  },
+});
+```
+
+### Complex nested schema
+
+```typescript
+import { zodSchema } from 'ai';
+import { z } from 'zod';
+
+const recipeSchema = zodSchema(
+  z.object({
+    name: z.string().describe('Recipe name'),
+    ingredients: z.array(
+      z.object({
+        name: z.string(),
+        quantity: z.string(),
+        unit: z.string().optional(),
+      })
+    ).describe('List of ingredients'),
+    steps: z.array(z.string()).describe('Cooking instructions'),
+    prepTime: z.number().describe('Prep time in minutes'),
+    cookTime: z.number().describe('Cook time in minutes'),
+    servings: z.number().describe('Number of servings'),
+    difficulty: z.enum(['easy', 'medium', 'hard']),
+  })
+);
+```
+
+### With refinements and transforms
+
+```typescript
+import { zodSchema } from 'ai';
+import { z } from 'zod';
+
+const emailSchema = zodSchema(
+  z.object({
+    email: z.string().email('Invalid email format'),
+    age: z.number().min(0).max(150),
+    website: z.string().url().optional(),
+  })
+);
+```
+
+### Recursive schema
+
+```typescript
+import { zodSchema } from 'ai';
+import { z } from 'zod';
+
+type TreeNode = {
+  value: string;
+  children?: TreeNode[];
+};
+
+const treeSchema: z.ZodType<TreeNode> = z.lazy(() =>
+  z.object({
+    value: z.string(),
+    children: z.array(treeSchema).optional(),
+  })
+);
+
+const schema = zodSchema(treeSchema, {
+  useReferences: true, // Required for recursive schemas
+});
+```
+
+### Array schema
+
+```typescript
+import { zodSchema } from 'ai';
+import { z } from 'zod';
+
+const countriesSchema = zodSchema(
+  z.array(
+    z.object({
+      name: z.string(),
+      capital: z.string(),
+      population: z.number(),
+      region: z.string(),
+    })
+  )
+);
+```
+
+### Union types
+
+```typescript
+import { zodSchema } from 'ai';
+import { z } from 'zod';
+
+const notificationSchema = zodSchema(
+  z.discriminatedUnion('type', [
+    z.object({
+      type: z.literal('email'),
+      email: z.string().email(),
+      subject: z.string(),
+      body: z.string(),
+    }),
+    z.object({
+      type: z.literal('sms'),
+      phoneNumber: z.string(),
+      message: z.string(),
+    }),
+    z.object({
+      type: z.literal('push'),
+      deviceId: z.string(),
+      title: z.string(),
+      body: z.string(),
+    }),
+  ])
+);
+```
+
+### With default values
+
+```typescript
+import { zodSchema } from 'ai';
+import { z } from 'zod';
+
+const settingsSchema = zodSchema(
+  z.object({
+    theme: z.enum(['light', 'dark']).default('light'),
+    notifications: z.boolean().default(true),
+    language: z.string().default('en'),
+    pageSize: z.number().min(10).max(100).default(20),
+  })
+);
+```
+
+### Optional and nullable fields
+
+```typescript
+import { zodSchema } from 'ai';
+import { z } from 'zod';
+
+const userSchema = zodSchema(
+  z.object({
+    id: z.string(),
+    name: z.string(),
+    email: z.string().email(),
+    // Optional field (can be undefined)
+    bio: z.string().optional(),
+    // Nullable field (can be null)
+    avatar: z.string().nullable(),
+    // Can be undefined or null
+    phoneNumber: z.string().optional().nullable(),
+  })
+);
+```
+
+### Enum schema
+
+```typescript
+import { zodSchema } from 'ai';
+import { z } from 'zod';
+
+const statusSchema = zodSchema(
+  z.enum(['pending', 'in_progress', 'completed', 'failed'])
+);
+```
+
+## Zod v3 vs Zod v4
+
+The `zodSchema` function automatically detects and handles both Zod v3 and Zod v4:
+
+```typescript
+import { zodSchema } from 'ai';
+import * as z3 from 'zod/v3';
+import * as z4 from 'zod/v4';
+
+// Works with Zod v3
+const schemaV3 = zodSchema(
+  z3.object({
+    name: z3.string(),
+  })
+);
+
+// Works with Zod v4
+const schemaV4 = zodSchema(
+  z4.object({
+    name: z4.string(),
+  })
+);
+```
+
+## Type Inference
+
+The main advantage of `zodSchema` over `jsonSchema` is automatic type inference:
+
+```typescript
+import { zodSchema } from 'ai';
+import { generateObject } from 'ai';
+import { z } from 'zod';
+
+const schema = zodSchema(
+  z.object({
+    name: z.string(),
+    age: z.number(),
+    tags: z.array(z.string()),
+  })
+);
+
+const result = await generateObject({
+  model: openai('gpt-4-turbo'),
+  schema,
+  prompt: 'Generate data',
+});
+
+// TypeScript knows the exact type:
+const name: string = result.object.name;
+const age: number = result.object.age;
+const tags: string[] = result.object.tags;
+```
+
+## Notes
+
+<Note>
+  When using descriptions on schema properties (via `.describe()`), the descriptions are passed to the language model
+  to help it understand what values to generate.
+</Note>
+
+<Note>
+  Recursive schemas require `useReferences: true`, but not all providers support JSON Schema references.
+  Test with your specific provider before using in production.
+</Note>

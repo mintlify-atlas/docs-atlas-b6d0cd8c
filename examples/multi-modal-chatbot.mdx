@@ -1,0 +1,286 @@
+---
+title: Multi-Modal Chatbot
+description: Build a chatbot that processes images and PDFs using the AI SDK with Next.js
+---
+
+# Multi-Modal Chatbot
+
+Learn how to build a chatbot capable of understanding both images and PDFs using the AI SDK.
+
+## What is Multi-Modal?
+
+Multi-modal refers to the ability of AI models to process and understand multiple types of input formats. In this guide, we'll focus on:
+
+- **Images**: Screenshots, photos, diagrams
+- **PDFs**: Documents, reports, forms
+- **Text**: Regular chat messages
+
+## Prerequisites
+
+- Node.js 18+
+- A Vercel AI Gateway API key
+- Basic knowledge of Next.js and React
+
+## Setup
+
+Create a new Next.js application:
+
+```bash
+pnpm create next-app@latest multi-modal-chatbot
+cd multi-modal-chatbot
+```
+
+Install dependencies:
+
+```bash
+pnpm add ai @ai-sdk/react
+```
+
+Configure your API key:
+
+```bash
+touch .env.local
+```
+
+```env filename=".env.local"
+AI_GATEWAY_API_KEY=your_api_key_here
+```
+
+## Implementation
+
+### Create the API Route
+
+Create a route handler that processes multi-modal messages:
+
+```ts filename="app/api/chat/route.ts"
+import { streamText, convertToModelMessages, UIMessage } from 'ai';
+
+export const maxDuration = 30;
+
+export async function POST(req: Request) {
+  const { messages }: { messages: UIMessage[] } = await req.json();
+
+  const result = streamText({
+    model: 'openai/gpt-4o',
+    messages: await convertToModelMessages(messages),
+  });
+
+  return result.toUIMessageStreamResponse();
+}
+```
+
+The `convertToModelMessages` function automatically handles the conversion of images and PDFs from the UI format to the model's expected format.
+
+### File Upload Helper
+
+Create a helper function to convert files to data URLs:
+
+```tsx filename="lib/file-utils.ts"
+export async function convertFilesToDataURLs(files: FileList) {
+  return Promise.all(
+    Array.from(files).map(
+      file =>
+        new Promise<{
+          type: 'file';
+          mediaType: string;
+          url: string;
+        }>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            resolve({
+              type: 'file',
+              mediaType: file.type,
+              url: reader.result as string,
+            });
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        }),
+    ),
+  );
+}
+```
+
+### Chat Interface with File Upload
+
+Build the frontend with support for uploading images and PDFs:
+
+```tsx filename="app/page.tsx"
+'use client';
+
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
+import { useRef, useState } from 'react';
+import Image from 'next/image';
+import { convertFilesToDataURLs } from '@/lib/file-utils';
+
+export default function Chat() {
+  const [input, setInput] = useState('');
+  const [files, setFiles] = useState<FileList | undefined>(undefined);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { messages, sendMessage } = useChat({
+    transport: new DefaultChatTransport({
+      api: '/api/chat',
+    }),
+  });
+
+  return (
+    <div className="flex flex-col w-full max-w-md py-24 mx-auto stretch">
+      {messages.map(m => (
+        <div key={m.id} className="whitespace-pre-wrap">
+          {m.role === 'user' ? 'User: ' : 'AI: '}
+          {m.parts.map((part, index) => {
+            if (part.type === 'text') {
+              return <span key={`${m.id}-text-${index}`}>{part.text}</span>;
+            }
+            if (part.type === 'file' && part.mediaType?.startsWith('image/')) {
+              return (
+                <Image
+                  key={`${m.id}-image-${index}`}
+                  src={part.url}
+                  width={500}
+                  height={500}
+                  alt={`attachment-${index}`}
+                />
+              );
+            }
+            if (part.type === 'file' && part.mediaType === 'application/pdf') {
+              return (
+                <iframe
+                  key={`${m.id}-pdf-${index}`}
+                  src={part.url}
+                  width={500}
+                  height={600}
+                  title={`pdf-${index}`}
+                />
+              );
+            }
+            return null;
+          })}
+        </div>
+      ))}
+
+      <form
+        className="fixed bottom-0 w-full max-w-md p-2 mb-8 border border-gray-300 rounded shadow-xl space-y-2"
+        onSubmit={async event => {
+          event.preventDefault();
+
+          const fileParts =
+            files && files.length > 0
+              ? await convertFilesToDataURLs(files)
+              : [];
+
+          sendMessage({
+            role: 'user',
+            parts: [{ type: 'text', text: input }, ...fileParts],
+          });
+
+          setInput('');
+          setFiles(undefined);
+
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+        }}
+      >
+        <input
+          type="file"
+          accept="image/*,application/pdf"
+          onChange={event => {
+            if (event.target.files) {
+              setFiles(event.target.files);
+            }
+          }}
+          multiple
+          ref={fileInputRef}
+        />
+        <input
+          className="w-full p-2"
+          value={input}
+          placeholder="Say something..."
+          onChange={e => setInput(e.target.value)}
+        />
+      </form>
+    </div>
+  );
+}
+```
+
+## Key Features
+
+### Message Parts Structure
+
+Messages use a `parts` array that can contain different types:
+
+```ts
+type MessagePart =
+  | { type: 'text'; text: string }
+  | { type: 'file'; mediaType: string; url: string };
+```
+
+### File Processing
+
+1. User selects files via input field
+2. Files are converted to data URLs using FileReader API
+3. Data URLs are sent as part of the message
+4. Model processes the files alongside text
+
+### Rendering Different Media Types
+
+The interface renders different parts appropriately:
+
+- Text: Displayed as plain text
+- Images: Rendered using Next.js Image component
+- PDFs: Displayed in an iframe
+
+## Running the Application
+
+```bash
+pnpm run dev
+```
+
+Visit `http://localhost:3000` and try:
+
+1. Upload an image and ask "What's in this image?"
+2. Upload a PDF and ask "Summarize this document"
+3. Send a regular text message
+
+## Using Other Providers
+
+The AI SDK supports multiple providers with multi-modal capabilities:
+
+```ts
+// Anthropic
+const result = streamText({
+  model: 'anthropic/claude-sonnet-4-20250514',
+  messages: await convertToModelMessages(messages),
+});
+
+// Google
+const result = streamText({
+  model: 'google/gemini-2.5-flash',
+  messages: await convertToModelMessages(messages),
+});
+```
+
+## Best Practices
+
+- **File Size**: Be mindful of file size limits for different providers
+- **Image Quality**: Balance image quality with upload speed
+- **Error Handling**: Handle file upload errors gracefully
+- **Loading States**: Show progress indicators during file processing
+
+## Next Steps
+
+- Add file size validation
+- Implement drag-and-drop file upload
+- Add support for more file types
+- Implement file preview before sending
+- Add tools for more advanced interactions
+
+## Resources
+
+- [Provider capabilities](/providers/ai-sdk-providers)
+- [useChat documentation](/docs/reference/ai-sdk-ui/use-chat)
+- [Multi-modal prompts](/docs/foundations/prompts)

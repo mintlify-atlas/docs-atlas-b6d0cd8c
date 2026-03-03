@@ -1,0 +1,330 @@
+---
+title: RAG Chatbot
+description: Build a retrieval-augmented generation chatbot with the AI SDK, embeddings, and vector search
+---
+
+# RAG Chatbot
+
+Learn how to build a chatbot that uses retrieval-augmented generation (RAG) to answer questions based on a custom knowledge base.
+
+## What is RAG?
+
+RAG (Retrieval Augmented Generation) enhances AI responses by fetching relevant information and providing it as context to the language model. This allows the model to answer questions about information it wasn't trained on, such as proprietary data or recent events.
+
+## How It Works
+
+1. **Chunking**: Break source material into smaller pieces
+2. **Embedding**: Convert text chunks into vector representations
+3. **Storage**: Store embeddings in a vector database
+4. **Retrieval**: When a user asks a question, embed the query and find similar chunks
+5. **Generation**: Pass relevant chunks to the LLM as context
+
+## Prerequisites
+
+- Node.js 18+
+- A Vercel AI Gateway API key
+- PostgreSQL with pgvector extension
+
+## Setup
+
+Clone the starter repository:
+
+```bash
+git clone https://github.com/vercel/ai-sdk-rag-starter
+cd ai-sdk-rag-starter
+pnpm install
+```
+
+### Database Setup
+
+Create a `.env` file:
+
+```bash
+cp .env.example .env
+```
+
+Add your database URL and AI Gateway API key:
+
+```env
+DATABASE_URL="your-postgres-url"
+AI_GATEWAY_API_KEY="your-api-key"
+```
+
+Run migrations:
+
+```bash
+pnpm db:migrate
+```
+
+## Implementation
+
+### Create Embeddings Schema
+
+Define a table to store text chunks and their embeddings:
+
+```ts filename="lib/db/schema/embeddings.ts"
+import { pgTable, text, varchar, vector, index } from 'drizzle-orm/pg-core';
+import { resources } from './resources';
+
+export const embeddings = pgTable(
+  'embeddings',
+  {
+    id: varchar('id', { length: 191 }).primaryKey(),
+    resourceId: varchar('resource_id', { length: 191 }).references(
+      () => resources.id,
+      { onDelete: 'cascade' },
+    ),
+    content: text('content').notNull(),
+    embedding: vector('embedding', { dimensions: 1536 }).notNull(),
+  },
+  table => ({
+    embeddingIndex: index('embeddingIndex').using(
+      'hnsw',
+      table.embedding.op('vector_cosine_ops'),
+    ),
+  }),
+);
+```
+
+### Generate Embeddings
+
+Create a function to chunk and embed text:
+
+```ts filename="lib/ai/embedding.ts"
+import { embedMany } from 'ai';
+
+const embeddingModel = 'openai/text-embedding-ada-002';
+
+const generateChunks = (input: string): string[] => {
+  return input
+    .trim()
+    .split('.')
+    .filter(i => i !== '');
+};
+
+export const generateEmbeddings = async (
+  value: string,
+): Promise<Array<{ embedding: number[]; content: string }>> => {
+  const chunks = generateChunks(value);
+  const { embeddings } = await embedMany({
+    model: embeddingModel,
+    values: chunks,
+  });
+  return embeddings.map((e, i) => ({ content: chunks[i], embedding: e }));
+};
+```
+
+### Store Resources with Embeddings
+
+Create a server action to save content and generate embeddings:
+
+```ts filename="lib/actions/resources.ts"
+'use server';
+
+import { db } from '../db';
+import { resources } from '../db/schema/resources';
+import { embeddings as embeddingsTable } from '../db/schema/embeddings';
+import { generateEmbeddings } from '../ai/embedding';
+
+export const createResource = async (input: { content: string }) => {
+  try {
+    const { content } = input;
+
+    const [resource] = await db
+      .insert(resources)
+      .values({ content })
+      .returning();
+
+    const embeddings = await generateEmbeddings(content);
+    await db.insert(embeddingsTable).values(
+      embeddings.map(embedding => ({
+        resourceId: resource.id,
+        ...embedding,
+      })),
+    );
+
+    return 'Resource successfully created and embedded.';
+  } catch (error) {
+    return error instanceof Error && error.message.length > 0
+      ? error.message
+      : 'Error, please try again.';
+  }
+};
+```
+
+### Retrieve Similar Content
+
+Implement semantic search using cosine similarity:
+
+```ts filename="lib/ai/embedding.ts"
+import { embed } from 'ai';
+import { db } from '../db';
+import { cosineDistance, desc, gt, sql } from 'drizzle-orm';
+import { embeddings } from '../db/schema/embeddings';
+
+export const findRelevantContent = async (userQuery: string) => {
+  const userQueryEmbedded = await embed({
+    model: embeddingModel,
+    value: userQuery,
+  });
+  
+  const similarity = sql<number>`1 - (${
+    cosineDistance(embeddings.embedding, userQueryEmbedded.embedding)
+  })`;
+  
+  const similarGuides = await db
+    .select({ name: embeddings.content, similarity })
+    .from(embeddings)
+    .where(gt(similarity, 0.5))
+    .orderBy(t => desc(t.similarity))
+    .limit(4);
+    
+  return similarGuides;
+};
+```
+
+### Create the Chat Interface
+
+Build a route handler that uses tools for adding and retrieving information:
+
+```ts filename="app/api/chat/route.ts"
+import { createResource } from '@/lib/actions/resources';
+import { findRelevantContent } from '@/lib/ai/embedding';
+import {
+  convertToModelMessages,
+  streamText,
+  tool,
+  UIMessage,
+  stepCountIs,
+} from 'ai';
+import { z } from 'zod';
+
+export const maxDuration = 30;
+
+export async function POST(req: Request) {
+  const { messages }: { messages: UIMessage[] } = await req.json();
+
+  const result = streamText({
+    model: 'openai/gpt-4o',
+    messages: await convertToModelMessages(messages),
+    stopWhen: stepCountIs(5),
+    system: `You are a helpful assistant. Check your knowledge base before answering any questions.
+    Only respond to questions using information from tool calls.
+    if no relevant information is found in the tool calls, respond, "Sorry, I don't know."`,
+    tools: {
+      addResource: tool({
+        description: `add a resource to your knowledge base.
+          If the user provides a random piece of knowledge unprompted, use this tool without asking for confirmation.`,
+        inputSchema: z.object({
+          content: z
+            .string()
+            .describe('the content or resource to add to the knowledge base'),
+        }),
+        execute: async ({ content }) => createResource({ content }),
+      }),
+      getInformation: tool({
+        description: `get information from your knowledge base to answer questions.`,
+        inputSchema: z.object({
+          question: z.string().describe('the users question'),
+        }),
+        execute: async ({ question }) => findRelevantContent(question),
+      }),
+    },
+  });
+
+  return result.toUIMessageStreamResponse();
+}
+```
+
+### Frontend with useChat
+
+Create a chat interface using the `useChat` hook:
+
+```tsx filename="app/page.tsx"
+'use client';
+
+import { useChat } from '@ai-sdk/react';
+import { useState } from 'react';
+
+export default function Chat() {
+  const [input, setInput] = useState('');
+  const { messages, sendMessage } = useChat();
+  
+  return (
+    <div className="flex flex-col w-full max-w-md py-24 mx-auto stretch">
+      <div className="space-y-4">
+        {messages.map(m => (
+          <div key={m.id} className="whitespace-pre-wrap">
+            <div>
+              <div className="font-bold">{m.role}</div>
+              {m.parts.map(part => {
+                switch (part.type) {
+                  case 'text':
+                    return <p>{part.text}</p>;
+                  case 'tool-addResource':
+                  case 'tool-getInformation':
+                    return (
+                      <p>
+                        call{part.state === 'output-available' ? 'ed' : 'ing'}{' '}
+                        tool: {part.type}
+                      </p>
+                    );
+                }
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <form
+        onSubmit={e => {
+          e.preventDefault();
+          sendMessage({ text: input });
+          setInput('');
+        }}
+      >
+        <input
+          className="fixed bottom-0 w-full max-w-md p-2 mb-8 border border-gray-300 rounded shadow-xl"
+          value={input}
+          placeholder="Say something..."
+          onChange={e => setInput(e.currentTarget.value)}
+        />
+      </form>
+    </div>
+  );
+}
+```
+
+## Running the Application
+
+```bash
+pnpm run dev
+```
+
+Visit `http://localhost:3000` and try:
+
+1. Tell the chatbot information: "My favorite food is pizza"
+2. Ask questions: "What is my favorite food?"
+
+The chatbot will store information in its knowledge base and retrieve it when needed.
+
+## Key Concepts
+
+- **Embeddings**: Vector representations of text that capture semantic meaning
+- **Vector Database**: Stores embeddings and enables similarity search
+- **Cosine Similarity**: Measures how similar two embeddings are
+- **Chunking**: Breaking text into smaller pieces for better embedding quality
+- **Tools**: Enable the agent to add and retrieve information dynamically
+
+## Next Steps
+
+- Experiment with different chunking strategies
+- Try different embedding models
+- Implement more advanced retrieval techniques
+- Add user-specific knowledge bases
+
+## Resources
+
+- [Full source code](https://github.com/vercel/ai-sdk-rag-starter)
+- [Embeddings documentation](/docs/ai-sdk-core/embeddings)
+- [Tools documentation](/docs/foundations/tools)

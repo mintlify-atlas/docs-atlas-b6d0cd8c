@@ -1,0 +1,544 @@
+---
+title: Model Context Protocol (MCP)
+description: Learn how to use Model Context Protocol tools with AI SDK Core.
+---
+
+# Model Context Protocol (MCP)
+
+The AI SDK supports connecting to [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) servers to access their tools, resources, and prompts. MCP enables your AI applications to discover and use capabilities across various services through a standardized interface.
+
+## What is MCP?
+
+Model Context Protocol (MCP) is an open standard that allows AI applications to:
+
+- **Discover tools** from external servers dynamically
+- **Access resources** like files, databases, and APIs
+- **Use prompts** defined by service providers
+- **Integrate services** without custom integrations
+
+## When to Use MCP
+
+MCP is best suited for:
+
+- **Rapid development**: Quickly prototype with external tools
+- **User-provided tools**: Allow users to bring their own MCP servers
+- **Dynamic tool discovery**: Tools that change frequently
+- **Third-party integrations**: Connect to services with MCP support
+
+### AI SDK Tools vs MCP Tools
+
+For production applications, prefer AI SDK tools for full control and type safety:
+
+| Aspect | AI SDK Tools | MCP Tools |
+|--------|--------------|------------|
+| **Type Safety** | Full static typing | Runtime discovery |
+| **Performance** | Same process (fast) | Network overhead |
+| **Control** | Full control over prompts/schemas | Server-controlled |
+| **Best For** | Production apps | Development, user tools |
+
+## Installation
+
+```bash
+npm install @ai-sdk/mcp
+```
+
+Optionally install the MCP SDK for additional transports:
+
+```bash
+npm install @modelcontextprotocol/sdk
+```
+
+## Creating an MCP Client
+
+### HTTP Transport (Recommended)
+
+For production deployments, use HTTP transport:
+
+```typescript
+import { createMCPClient } from '@ai-sdk/mcp';
+
+const mcpClient = await createMCPClient({
+  transport: {
+    type: 'http',
+    url: 'https://your-server.com/mcp',
+    
+    // Optional: Add authentication
+    headers: {
+      Authorization: 'Bearer your-api-key',
+    },
+  },
+});
+```
+
+### With OAuth
+
+```typescript
+import { createMCPClient } from '@ai-sdk/mcp';
+
+const mcpClient = await createMCPClient({
+  transport: {
+    type: 'http',
+    url: 'https://your-server.com/mcp',
+    authProvider: myOAuthClientProvider,
+  },
+});
+```
+
+### SSE Transport
+
+Server-Sent Events provide an alternative HTTP-based transport:
+
+```typescript
+import { createMCPClient } from '@ai-sdk/mcp';
+
+const mcpClient = await createMCPClient({
+  transport: {
+    type: 'sse',
+    url: 'https://my-server.com/sse',
+    headers: {
+      Authorization: 'Bearer my-api-key',
+    },
+  },
+});
+```
+
+### Stdio Transport (Local Only)
+
+<Note type="warning">
+  Use stdio only for local development. It cannot be deployed to production.
+</Note>
+
+```typescript
+import { createMCPClient } from '@ai-sdk/mcp';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+
+const mcpClient = await createMCPClient({
+  transport: new StdioClientTransport({
+    command: 'node',
+    args: ['path/to/server.js'],
+  }),
+});
+```
+
+## Using MCP Tools
+
+### Schema Discovery
+
+Automatically load all tools from the MCP server:
+
+```typescript
+import { createMCPClient } from '@ai-sdk/mcp';
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const mcpClient = await createMCPClient({
+  transport: {
+    type: 'http',
+    url: 'https://weather-mcp.example.com',
+  },
+});
+
+const tools = await mcpClient.tools();
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  tools,
+  prompt: 'What is the weather in Brooklyn, New York?',
+});
+
+console.log(result.text);
+
+await mcpClient.close();
+```
+
+### Schema Definition
+
+Define schemas explicitly for type safety:
+
+```typescript
+import { createMCPClient } from '@ai-sdk/mcp';
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const mcpClient = await createMCPClient({
+  transport: {
+    type: 'http',
+    url: 'https://weather-mcp.example.com',
+  },
+});
+
+const tools = await mcpClient.tools({
+  schemas: {
+    'get-weather': {
+      inputSchema: z.object({
+        location: z.string().describe('City and country'),
+        units: z.enum(['celsius', 'fahrenheit']).optional(),
+      }),
+    },
+  },
+});
+
+const result = await generateText({
+  model: openai('gpt-5'),
+  tools,
+  prompt: 'What is the weather in Tokyo?',
+});
+
+console.log(result.text);
+
+await mcpClient.close();
+```
+
+### Typed Tool Outputs
+
+Define output schemas for type-safe results:
+
+```typescript
+import { createMCPClient } from '@ai-sdk/mcp';
+import { z } from 'zod';
+
+const mcpClient = await createMCPClient({
+  transport: {
+    type: 'http',
+    url: 'https://weather-mcp.example.com',
+  },
+});
+
+const tools = await mcpClient.tools({
+  schemas: {
+    'get-weather': {
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      // Define output schema for typed results
+      outputSchema: z.object({
+        temperature: z.number(),
+        condition: z.string(),
+        humidity: z.number(),
+      }),
+    },
+  },
+});
+
+// Execute tool directly with typed result
+const result = await tools['get-weather'].execute(
+  { location: 'New York' },
+  { messages: [], toolCallId: 'weather-1' }
+);
+
+console.log(`Temperature: ${result.temperature}°C`);
+console.log(`Condition: ${result.condition}`);
+console.log(`Humidity: ${result.humidity}%`);
+```
+
+<Note>
+  Without `outputSchema`, the tool returns the raw `CallToolResult` object. With `outputSchema`, you get validated, typed data.
+</Note>
+
+## Closing the Client
+
+### Short-Lived Usage
+
+Close after the response completes:
+
+```typescript
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const mcpClient = await createMCPClient({ /* ... */ });
+const tools = await mcpClient.tools();
+
+const result = streamText({
+  model: openai('gpt-5'),
+  tools,
+  prompt: 'What is the weather?',
+  onFinish: async () => {
+    await mcpClient.close();
+  },
+});
+```
+
+### Long-Lived Usage
+
+Use try/finally for non-streaming:
+
+```typescript
+import { createMCPClient, type MCPClient } from '@ai-sdk/mcp';
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+let mcpClient: MCPClient | undefined;
+
+try {
+  mcpClient = await createMCPClient({ /* ... */ });
+  const tools = await mcpClient.tools();
+  
+  const result = await generateText({
+    model: openai('gpt-5'),
+    tools,
+    prompt: 'What is the weather?',
+  });
+  
+  console.log(result.text);
+} finally {
+  await mcpClient?.close();
+}
+```
+
+## MCP Resources
+
+Resources are application-driven data sources that provide context to the model.
+
+### Listing Resources
+
+```typescript
+const resources = await mcpClient.listResources();
+
+for (const resource of resources) {
+  console.log('Resource:', resource.name);
+  console.log('URI:', resource.uri);
+  console.log('Description:', resource.description);
+}
+```
+
+### Reading Resources
+
+```typescript
+const resourceData = await mcpClient.readResource({
+  uri: 'file:///example/document.txt',
+});
+
+console.log(resourceData.content);
+```
+
+### Resource Templates
+
+Resource templates allow dynamic URI patterns:
+
+```typescript
+const templates = await mcpClient.listResourceTemplates();
+
+for (const template of templates) {
+  console.log('Template:', template.name);
+  console.log('URI pattern:', template.uriTemplate);
+}
+```
+
+## MCP Prompts
+
+<Note type="warning">
+  MCP Prompts is an experimental feature and may change.
+</Note>
+
+### Listing Prompts
+
+```typescript
+const prompts = await mcpClient.experimental_listPrompts();
+
+for (const prompt of prompts) {
+  console.log('Prompt:', prompt.name);
+  console.log('Description:', prompt.description);
+}
+```
+
+### Getting a Prompt
+
+```typescript
+const prompt = await mcpClient.experimental_getPrompt({
+  name: 'code_review',
+  arguments: {
+    code: 'function add(a, b) { return a + b; }',
+    language: 'javascript',
+  },
+});
+
+console.log(prompt.messages);
+```
+
+## Elicitation Requests
+
+Elicitation allows MCP servers to request additional information during tool execution.
+
+### Enable Elicitation
+
+```typescript
+const mcpClient = await createMCPClient({
+  transport: {
+    type: 'sse',
+    url: 'https://your-server.com/sse',
+  },
+  capabilities: {
+    elicitation: {},
+  },
+});
+```
+
+### Handle Elicitation Requests
+
+```typescript
+import { ElicitationRequestSchema } from '@ai-sdk/mcp';
+
+mcpClient.onElicitationRequest(ElicitationRequestSchema, async (request) => {
+  // request.params.message: Description of needed input
+  // request.params.requestedSchema: Expected input structure
+  
+  console.log('Server needs:', request.params.message);
+  
+  // Get input from user
+  const userInput = await getUserInput(
+    request.params.message,
+    request.params.requestedSchema
+  );
+  
+  // Return response
+  return {
+    action: 'accept', // or 'decline' or 'cancel'
+    content: userInput,
+  };
+});
+```
+
+### Elicitation Actions
+
+<ParamField path="accept" type="string">
+  User provided the requested information (include `content`)
+</ParamField>
+
+<ParamField path="decline" type="string">
+  User chose not to provide the information
+</ParamField>
+
+<ParamField path="cancel" type="string">
+  User cancelled the operation entirely
+</ParamField>
+
+## Complete Example
+
+```typescript
+import { createMCPClient } from '@ai-sdk/mcp';
+import { generateText, stepCountIs } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+let mcpClient;
+
+try {
+  // Create MCP client
+  mcpClient = await createMCPClient({
+    transport: {
+      type: 'http',
+      url: 'https://weather-mcp.example.com',
+      headers: {
+        'Authorization': 'Bearer your-api-key',
+      },
+    },
+  });
+  
+  // Load tools with schemas
+  const tools = await mcpClient.tools({
+    schemas: {
+      'get-weather': {
+        inputSchema: z.object({
+          location: z.string(),
+          units: z.enum(['celsius', 'fahrenheit']).optional(),
+        }),
+        outputSchema: z.object({
+          temperature: z.number(),
+          condition: z.string(),
+        }),
+      },
+    },
+  });
+  
+  // Use with generateText
+  const result = await generateText({
+    model: openai('gpt-5'),
+    tools,
+    stopWhen: stepCountIs(5),
+    prompt: 'What should I wear in San Francisco today?',
+  });
+  
+  console.log(result.text);
+  
+  // Access tool results
+  for (const toolResult of result.toolResults) {
+    if (toolResult.toolName === 'get-weather') {
+      console.log('Temperature:', toolResult.output.temperature);
+      console.log('Condition:', toolResult.output.condition);
+    }
+  }
+  
+} finally {
+  await mcpClient?.close();
+}
+```
+
+## Best Practices
+
+### Use HTTP Transport for Production
+
+HTTP and SSE transports work in all deployment environments:
+
+```typescript
+// Good: Works everywhere
+const mcpClient = await createMCPClient({
+  transport: {
+    type: 'http',
+    url: 'https://your-server.com/mcp',
+  },
+});
+
+// Bad: Only works locally
+const mcpClient = await createMCPClient({
+  transport: new StdioClientTransport({ /* ... */ }),
+});
+```
+
+### Define Schemas for Type Safety
+
+```typescript
+// Good: Type-safe with IDE autocomplete
+const tools = await mcpClient.tools({
+  schemas: {
+    'get-weather': {
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ temperature: z.number() }),
+    },
+  },
+});
+
+// Acceptable: No type safety
+const tools = await mcpClient.tools();
+```
+
+### Close Clients Properly
+
+```typescript
+// Good: Cleanup in finally block
+try {
+  const mcpClient = await createMCPClient({ /* ... */ });
+  // Use client
+} finally {
+  await mcpClient?.close();
+}
+
+// Good: Cleanup in callback
+const result = streamText({
+  tools: await mcpClient.tools(),
+  onFinish: async () => {
+    await mcpClient.close();
+  },
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Tool Calling" icon="wrench" href="/ai-sdk-core/tools-and-tool-calling">
+    Learn about AI SDK tools
+  </Card>
+  <Card title="Prompt Engineering" icon="wand-magic-sparkles" href="/ai-sdk-core/prompt-engineering">
+    Tips for effective tool usage
+  </Card>
+</CardGroup>

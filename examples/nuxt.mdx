@@ -1,0 +1,515 @@
+---
+title: Nuxt with AI SDK
+description: Build AI-powered Nuxt applications with server-side streaming using the AI SDK
+---
+
+# Nuxt with AI SDK
+
+Learn how to integrate the AI SDK into Nuxt applications for server-side AI features and streaming responses.
+
+## Why Nuxt?
+
+Nuxt is an excellent framework for AI applications:
+
+- **Server Routes**: Built-in API routes with TypeScript
+- **Auto-imports**: Composables and utilities available everywhere
+- **SSR/SSG**: Server-side rendering and static generation
+- **File-based Routing**: Intuitive project structure
+- **Vue 3**: Reactive UI with Composition API
+
+## Prerequisites
+
+- Node.js 18+
+- Basic knowledge of Vue and Nuxt
+- Vercel AI Gateway API key
+
+## Quick Start
+
+Create a new Nuxt application:
+
+```bash
+pnpx nuxi@latest init my-ai-app
+cd my-ai-app
+```
+
+Install AI SDK dependencies:
+
+```bash
+pnpm add ai @ai-sdk/react
+```
+
+Configure environment variables:
+
+```bash
+echo "AI_GATEWAY_API_KEY=your-api-key" > .env
+```
+
+Update `nuxt.config.ts`:
+
+```ts filename="nuxt.config.ts"
+export default defineNuxtConfig({
+  runtimeConfig: {
+    aiGatewayApiKey: process.env.AI_GATEWAY_API_KEY,
+  },
+  compatibilityDate: '2024-03-01',
+});
+```
+
+## Basic Chat API
+
+Create a streaming chat endpoint:
+
+```ts filename="server/api/chat.ts"
+import { streamText, convertToModelMessages } from 'ai';
+
+export default defineLazyEventHandler(async () => {
+  return defineEventHandler(async (event) => {
+    const { messages } = await readBody(event);
+
+    const result = streamText({
+      model: 'openai/gpt-4o',
+      messages: await convertToModelMessages(messages),
+    });
+
+    return result.toUIMessageStreamResponse();
+  });
+});
+```
+
+## Chat Component
+
+Create a Vue component with `useChat`:
+
+```vue filename="pages/index.vue"
+<script setup lang="ts">
+import { useChat } from '@ai-sdk/react';
+
+const { messages, input, handleInputChange, handleSubmit } = useChat({
+  api: '/api/chat',
+});
+</script>
+
+<template>
+  <div class="flex flex-col w-full max-w-md py-24 mx-auto">
+    <div v-for="m in messages" :key="m.id" class="whitespace-pre-wrap">
+      <div class="font-bold">{{ m.role === 'user' ? 'User: ' : 'AI: ' }}</div>
+      <template v-for="(part, i) in m.parts" :key="i">
+        <p v-if="part.type === 'text'">{{ part.text }}</p>
+      </template>
+    </div>
+
+    <form @submit="handleSubmit" class="fixed bottom-0 w-full max-w-md">
+      <input
+        class="w-full p-2 mb-8 border border-gray-300 rounded shadow-xl"
+        :value="input"
+        placeholder="Say something..."
+        @input="handleInputChange"
+      />
+    </form>
+  </div>
+</template>
+```
+
+## Text Generation
+
+Generate text on-demand:
+
+**API Route:**
+
+```ts filename="server/api/generate.post.ts"
+import { generateText } from 'ai';
+
+export default defineEventHandler(async (event) => {
+  const { prompt } = await readBody(event);
+
+  const { text } = await generateText({
+    model: 'openai/gpt-4o',
+    prompt,
+  });
+
+  return { text };
+});
+```
+
+**Component:**
+
+```vue filename="pages/generate.vue"
+<script setup lang="ts">
+const prompt = ref('Why is the sky blue?');
+const generation = ref('');
+const isLoading = ref(false);
+
+const generate = async () => {
+  isLoading.value = true;
+  
+  const { data } = await useFetch('/api/generate', {
+    method: 'POST',
+    body: { prompt: prompt.value },
+  });
+  
+  if (data.value) {
+    generation.value = data.value.text;
+  }
+  
+  isLoading.value = false;
+};
+</script>
+
+<template>
+  <div>
+    <input v-model="prompt" placeholder="Enter a prompt..." />
+    <button @click="generate" :disabled="isLoading">
+      {{ isLoading ? 'Generating...' : 'Generate' }}
+    </button>
+    <p v-if="generation">{{ generation }}</p>
+  </div>
+</template>
+```
+
+## Structured Output
+
+Generate typed objects:
+
+**API Route:**
+
+```ts filename="server/api/recipe.post.ts"
+import { generateObject, Output } from 'ai';
+import { z } from 'zod';
+
+const recipeSchema = z.object({
+  name: z.string(),
+  ingredients: z.array(z.string()),
+  steps: z.array(z.string()),
+});
+
+export default defineEventHandler(async (event) => {
+  const { dish } = await readBody(event);
+
+  const { object: recipe } = await generateObject({
+    model: 'openai/gpt-4o',
+    prompt: `Generate a recipe for ${dish}`,
+    output: Output.object({
+      schema: recipeSchema,
+    }),
+  });
+
+  return recipe;
+});
+```
+
+**Component:**
+
+```vue filename="pages/recipe.vue"
+<script setup lang="ts">
+interface Recipe {
+  name: string;
+  ingredients: string[];
+  steps: string[];
+}
+
+const dish = ref('chocolate cake');
+const recipe = ref<Recipe | null>(null);
+
+const generateRecipe = async () => {
+  const { data } = await useFetch('/api/recipe', {
+    method: 'POST',
+    body: { dish: dish.value },
+  });
+  
+  if (data.value) {
+    recipe.value = data.value as Recipe;
+  }
+};
+</script>
+
+<template>
+  <div>
+    <input v-model="dish" placeholder="Enter a dish..." />
+    <button @click="generateRecipe">Generate Recipe</button>
+    
+    <div v-if="recipe">
+      <h2>{{ recipe.name }}</h2>
+      <h3>Ingredients:</h3>
+      <ul>
+        <li v-for="(ing, i) in recipe.ingredients" :key="i">{{ ing }}</li>
+      </ul>
+      <h3>Steps:</h3>
+      <ol>
+        <li v-for="(step, i) in recipe.steps" :key="i">{{ step }}</li>
+      </ol>
+    </div>
+  </div>
+</template>
+```
+
+## Tool Calling
+
+Implement tools in your Nuxt API:
+
+```ts filename="server/api/chat-with-tools.ts"
+import {
+  streamText,
+  convertToModelMessages,
+  tool,
+  stepCountIs,
+} from 'ai';
+import { z } from 'zod';
+
+export default defineEventHandler(async (event) => {
+  const { messages } = await readBody(event);
+
+  const result = streamText({
+    model: 'openai/gpt-4o',
+    messages: await convertToModelMessages(messages),
+    stopWhen: stepCountIs(10),
+    tools: {
+      getWeather: tool({
+        description: 'Get current weather for a city',
+        inputSchema: z.object({
+          city: z.string(),
+        }),
+        execute: async ({ city }) => {
+          // Fetch weather data
+          const data = await $fetch(
+            `https://api.weatherapi.com/v1/current.json`,
+            {
+              params: {
+                key: useRuntimeConfig().weatherApiKey,
+                q: city,
+              },
+            },
+          );
+          
+          return {
+            temperature: data.current.temp_c,
+            condition: data.current.condition.text,
+          };
+        },
+      }),
+    },
+  });
+
+  return result.toUIMessageStreamResponse();
+});
+```
+
+## Server Composables
+
+Create reusable AI utilities:
+
+```ts filename="server/utils/ai.ts"
+import { generateText } from 'ai';
+
+export const generateSummary = async (text: string) => {
+  const { text: summary } = await generateText({
+    model: 'openai/gpt-4o',
+    prompt: `Summarize this text: ${text}`,
+  });
+  
+  return summary;
+};
+
+export const generateTags = async (content: string) => {
+  const { object: tags } = await generateObject({
+    model: 'openai/gpt-4o',
+    prompt: `Generate tags for: ${content}`,
+    output: Output.object({
+      schema: z.object({
+        tags: z.array(z.string()),
+      }),
+    }),
+  });
+  
+  return tags.tags;
+};
+```
+
+Use in API routes:
+
+```ts filename="server/api/summarize.post.ts"
+export default defineEventHandler(async (event) => {
+  const { text } = await readBody(event);
+  const summary = await generateSummary(text);
+  return { summary };
+});
+```
+
+## Multi-Modal Input
+
+Handle images in chat:
+
+```vue filename="pages/chat-multimodal.vue"
+<script setup lang="ts">
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
+import { ref } from 'vue';
+
+const fileInput = ref<HTMLInputElement | null>(null);
+const files = ref<FileList | null>(null);
+
+const { messages, input, handleInputChange, sendMessage } = useChat({
+  transport: new DefaultChatTransport({ api: '/api/chat' }),
+});
+
+const handleSubmit = async (e: Event) => {
+  e.preventDefault();
+
+  const fileParts = files.value
+    ? await convertFilesToDataURLs(files.value)
+    : [];
+
+  sendMessage({
+    role: 'user',
+    parts: [{ type: 'text', text: input.value }, ...fileParts],
+  });
+
+  files.value = null;
+  if (fileInput.value) fileInput.value.value = '';
+};
+
+async function convertFilesToDataURLs(fileList: FileList) {
+  return Promise.all(
+    Array.from(fileList).map(
+      (file) =>
+        new Promise<{ type: 'file'; mediaType: string; url: string }>(
+          (resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () =>
+              resolve({
+                type: 'file',
+                mediaType: file.type,
+                url: reader.result as string,
+              });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          },
+        ),
+    ),
+  );
+}
+</script>
+
+<template>
+  <div>
+    <div v-for="m in messages" :key="m.id">
+      {{ m.role }}:
+      <template v-for="(part, i) in m.parts" :key="i">
+        <span v-if="part.type === 'text'">{{ part.text }}</span>
+        <img
+          v-else-if="part.type === 'file' && part.mediaType?.startsWith('image/')"
+          :src="part.url"
+          width="300"
+        />
+      </template>
+    </div>
+
+    <form @submit="handleSubmit">
+      <input
+        ref="fileInput"
+        type="file"
+        accept="image/*"
+        @change="(e) => files = (e.target as HTMLInputElement).files"
+      />
+      <input
+        :value="input"
+        @input="handleInputChange"
+        placeholder="Say something..."
+      />
+      <button type="submit">Send</button>
+    </form>
+  </div>
+</template>
+```
+
+## Middleware
+
+Protect AI routes with middleware:
+
+```ts filename="server/middleware/auth.ts"
+export default defineEventHandler((event) => {
+  const path = getRequestURL(event).pathname;
+  
+  if (path.startsWith('/api/chat')) {
+    const apiKey = getHeader(event, 'x-api-key');
+    
+    if (!apiKey || apiKey !== useRuntimeConfig().apiKey) {
+      throw createError({
+        statusCode: 401,
+        message: 'Unauthorized',
+      });
+    }
+  }
+});
+```
+
+## Error Handling
+
+Handle AI errors gracefully:
+
+```ts filename="server/api/chat.ts"
+export default defineEventHandler(async (event) => {
+  try {
+    const { messages } = await readBody(event);
+
+    const result = streamText({
+      model: 'openai/gpt-4o',
+      messages: await convertToModelMessages(messages),
+    });
+
+    return result.toUIMessageStreamResponse();
+  } catch (error) {
+    console.error('AI Error:', error);
+    
+    throw createError({
+      statusCode: 500,
+      message: 'Failed to generate response',
+    });
+  }
+});
+```
+
+## Deployment
+
+### Environment Variables
+
+Set in `.env` or deployment platform:
+
+```bash
+AI_GATEWAY_API_KEY=your-key
+WEATHER_API_KEY=your-weather-key
+```
+
+### Build and Deploy
+
+```bash
+# Build for production
+pnpm build
+
+# Preview production build
+pnpm preview
+
+# Deploy to Vercel/Netlify
+git push
+```
+
+## Best Practices
+
+1. **Use Server Routes**: Keep AI logic server-side
+2. **Lazy Event Handlers**: Use `defineLazyEventHandler` for better performance
+3. **Runtime Config**: Access environment variables securely
+4. **Type Safety**: Leverage TypeScript throughout
+5. **Error Handling**: Use Nuxt's error utilities
+6. **Composables**: Create reusable AI utilities
+7. **Caching**: Cache responses when appropriate
+
+## Example Repository
+
+View the complete example: [github.com/vercel/ai/examples/nuxt-openai](https://github.com/vercel/ai/tree/main/examples/nuxt-openai)
+
+## Resources
+
+- [Nuxt Documentation](https://nuxt.com/)
+- [AI SDK Documentation](/docs)
+- [Nuxt Server Routes](https://nuxt.com/docs/guide/directory-structure/server)
+- [useChat Hook](/docs/reference/ai-sdk-ui/use-chat)
+- [Vue Composables](https://vuejs.org/guide/reusability/composables.html)

@@ -1,80 +1,305 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get started with the AI SDK by building a simple text generation example in Node.js.
 ---
 
-## Get started in three steps
+# Quickstart
 
-Get your documentation site running locally and make your first customization.
+This quickstart guide will walk you through building your first AI application using the AI SDK. You'll learn how to generate text, stream responses, and create structured outputs.
 
-### Step 1: Set up your local environment
+## Prerequisites
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+Before you begin, make sure you have:
+
+- Node.js 18+ installed
+- An API key from [Vercel AI Gateway](https://vercel.com/ai-gateway) or a direct provider like [OpenAI](https://platform.openai.com/api-keys)
+
+## Setup
+
+<Steps>
+  <Step title="Create a new project">
+    Create a new directory and initialize a Node.js project:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```bash
+    mkdir my-ai-app
+    cd my-ai-app
+    npm init -y
+    ```
+  </Step>
+  
+  <Step title="Install dependencies">
+    Install the AI SDK and a provider package:
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    <CodeGroup>
+    ```bash npm
+    npm install ai @ai-sdk/openai
+    ```
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```bash pnpm
+    pnpm add ai @ai-sdk/openai
+    ```
+    
+    ```bash yarn
+    yarn add ai @ai-sdk/openai
+    ```
+    
+    ```bash bun
+    bun add ai @ai-sdk/openai
+    ```
+    </CodeGroup>
+  </Step>
+  
+  <Step title="Configure your API key">
+    Create a `.env` file and add your API key:
+    
+    ```env filename=".env"
+    OPENAI_API_KEY=your_api_key_here
+    ```
+    
+    <Note>
+    Never commit your `.env` file to version control. Add it to `.gitignore`.
+    </Note>
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## Generate text
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+Let's start with the most basic example - generating text from a prompt.
 
-### Step 3: Go live
+Create a file called `generate-text.ts`:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+```typescript filename="generate-text.ts"
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-4o'),
+  prompt: 'Invent a new holiday and describe its traditions.',
+});
+
+console.log(result.text);
+console.log('Usage:', result.usage);
+console.log('Finish reason:', result.finishReason);
+```
+
+Run the example:
+
+```bash
+node --loader ts-node/esm generate-text.ts
+```
+
+### What's happening here?
+
+- `generateText`: The core function for generating text completions
+- `model`: Specifies which AI model to use (GPT-4o in this case)
+- `prompt`: The input text that guides the model's response
+- `result.text`: The generated text response
+- `result.usage`: Token usage information (prompt tokens, completion tokens, total tokens)
+- `result.finishReason`: Why the model stopped generating (e.g., "stop", "length")
+
+## Stream text
+
+For longer responses, streaming provides a better user experience by showing results as they're generated.
+
+Create a file called `stream-text.ts`:
+
+```typescript filename="stream-text.ts"
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = streamText({
+  model: openai('gpt-4o'),
+  prompt: 'Invent a new holiday and describe its traditions.',
+});
+
+// Stream the text
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+
+console.log('\n\nUsage:', await result.usage);
+console.log('Finish reason:', await result.finishReason);
+```
+
+Run the example:
+
+```bash
+node --loader ts-node/esm stream-text.ts
+```
+
+### Key differences
+
+- `streamText`: Returns a stream instead of waiting for the complete response
+- `result.textStream`: An async iterable that yields text chunks as they arrive
+- Properties like `usage` and `finishReason` are promises that resolve when streaming completes
+
+## Generate structured data
+
+Generate type-safe structured outputs using Zod schemas:
+
+<Steps>
+  <Step title="Install Zod">
+    ```bash
+    npm install zod
+    ```
+  </Step>
+  
+  <Step title="Create the example">
+    Create a file called `generate-object.ts`:
+    
+    ```typescript filename="generate-object.ts"
+    import { generateText, Output } from 'ai';
+    import { openai } from '@ai-sdk/openai';
+    import { z } from 'zod';
+    
+    const { output } = await generateText({
+      model: openai('gpt-4o'),
+      output: Output.object({
+        schema: z.object({
+          recipe: z.object({
+            name: z.string(),
+            ingredients: z.array(
+              z.object({
+                name: z.string(),
+                amount: z.string(),
+              })
+            ),
+            steps: z.array(z.string()),
+          }),
+        }),
+      }),
+      prompt: 'Generate a lasagna recipe.',
+    });
+    
+    console.log('Recipe:', output.recipe.name);
+    console.log('\nIngredients:');
+    output.recipe.ingredients.forEach(ingredient => {
+      console.log(`- ${ingredient.amount} ${ingredient.name}`);
+    });
+    console.log('\nSteps:');
+    output.recipe.steps.forEach((step, index) => {
+      console.log(`${index + 1}. ${step}`);
+    });
+    ```
+  </Step>
+  
+  <Step title="Run the example">
+    ```bash
+    node --loader ts-node/esm generate-object.ts
+    ```
+  </Step>
+</Steps>
+
+### Why structured outputs?
+
+- **Type safety**: Full TypeScript support with schema validation
+- **Reliability**: The model is constrained to follow your schema
+- **Integration**: Easy to integrate with databases and APIs
+
+## Use tools
+
+Tools allow AI models to perform actions and retrieve real-time information:
+
+```typescript filename="generate-with-tools.ts"
+import { generateText, tool } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const result = await generateText({
+  model: openai('gpt-4o'),
+  tools: {
+    weather: tool({
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      execute: async ({ location }) => {
+        // In a real app, you'd call a weather API here
+        return {
+          location,
+          temperature: 72,
+          condition: 'sunny',
+        };
+      },
+    }),
+  },
+  prompt: 'What is the weather in San Francisco?',
+});
+
+console.log('Response:', result.text);
+
+// Access tool calls
+for (const toolCall of result.toolCalls) {
+  console.log('Tool called:', toolCall.toolName);
+  console.log('Arguments:', toolCall.input);
+}
+
+// Access tool results
+for (const toolResult of result.toolResults) {
+  console.log('Tool result:', toolResult.output);
+}
+```
+
+### How tools work
+
+1. You define tools with input schemas and execute functions
+2. The model decides when to call tools based on the prompt
+3. The SDK automatically executes the tools and sends results back to the model
+4. The model uses the tool results to generate its final response
+
+## Using Vercel AI Gateway
+
+If you prefer using the Vercel AI Gateway instead of direct provider packages:
+
+```typescript filename="gateway-example.ts"
+import { generateText } from 'ai';
+
+// No provider import needed - gateway is included in 'ai'
+const result = await generateText({
+  model: 'openai/gpt-4o', // Use string format: 'provider/model'
+  prompt: 'What is an agent?',
+});
+
+console.log(result.text);
+```
+
+Make sure your `.env` file has:
+
+```env filename=".env"
+AI_GATEWAY_API_KEY=your_gateway_key_here
+```
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
+Now that you've learned the basics, explore more advanced features:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Build a chat interface" icon="messages" href="/ai-sdk-ui">
+    Use React, Vue, or Svelte hooks to build chat UIs
+  </Card>
+  <Card title="Create agents" icon="robot" href="/agents">
+    Build autonomous agents with tools and multi-step reasoning
+  </Card>
+  <Card title="Explore providers" icon="server" href="/providers">
+    Learn about all available AI providers and models
+  </Card>
+  <Card title="API reference" icon="book" href="/reference">
+    Dive into the complete API documentation
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Example projects
+
+Check out complete example applications:
+
+- [Next.js Chat App](/examples/next-chat)
+- [Node.js CLI Tool](/examples/node-cli)
+- [Svelte Chatbot](/examples/svelte-chat)
+- [Agent with Tools](/examples/agent-tools)
+
+## Get help
+
+If you run into issues:
+
+- Check the [troubleshooting guide](/troubleshooting)
+- Ask questions in the [Vercel Community](https://community.vercel.com/c/ai-sdk/62)
+- Review [API documentation](/reference)

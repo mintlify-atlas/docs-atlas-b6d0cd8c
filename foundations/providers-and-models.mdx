@@ -1,0 +1,233 @@
+---
+title: Providers and models
+description: Learn about the providers and models available in the AI SDK
+---
+
+Companies such as OpenAI and Anthropic (providers) offer access to a range of large language models (LLMs) with differing strengths and capabilities through their own APIs.
+
+Each provider typically has its own unique method for interfacing with their models, complicating the process of switching providers and increasing the risk of vendor lock-in.
+
+To solve these challenges, AI SDK Core offers a standardized approach to interacting with LLMs through a language model specification that abstracts differences between providers. This unified interface allows you to switch between providers with ease while using the same API for all providers.
+
+## Provider architecture
+
+The AI SDK uses a layered provider architecture:
+
+### Language model specification
+
+At the core is the `LanguageModelV3` interface from `@ai-sdk/provider`:
+
+```ts
+type LanguageModelV3 = {
+  readonly specificationVersion: 'v3';
+  readonly provider: string;
+  readonly modelId: string;
+  readonly supportedUrls: Record<string, RegExp[]> | PromiseLike<Record<string, RegExp[]>>;
+  
+  doGenerate(
+    options: LanguageModelV3CallOptions,
+  ): PromiseLike<LanguageModelV3GenerateResult>;
+  
+  doStream(
+    options: LanguageModelV3CallOptions,
+  ): PromiseLike<LanguageModelV3StreamResult>;
+};
+```
+
+This interface defines the contract that all language model providers must implement.
+
+### Provider implementation
+
+Providers implement this interface to work with the AI SDK. For example, here's how the OpenAI provider is structured:
+
+```ts
+import { openai } from '@ai-sdk/openai';
+
+// Create a model instance
+const model = openai('gpt-4');
+
+// Use with any AI SDK function
+import { generateText } from 'ai';
+
+const result = await generateText({
+  model,
+  prompt: 'Hello, world!',
+});
+```
+
+### Core functions
+
+The AI SDK provides high-level functions like `generateText` and `streamText` that work with any provider:
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
+
+// Use OpenAI
+const result1 = await generateText({
+  model: openai('gpt-4'),
+  prompt: 'Explain quantum computing.',
+});
+
+// Switch to Anthropic - same API
+const result2 = await generateText({
+  model: anthropic('claude-3-5-sonnet-20241022'),
+  prompt: 'Explain quantum computing.',
+});
+```
+
+## Available providers
+
+The AI SDK comes with a wide range of providers:
+
+### Official providers
+
+- [xAI Grok Provider](/providers/ai-sdk-providers/xai) (`@ai-sdk/xai`)
+- [OpenAI Provider](/providers/ai-sdk-providers/openai) (`@ai-sdk/openai`)
+- [Azure OpenAI Provider](/providers/ai-sdk-providers/azure) (`@ai-sdk/azure`)
+- [Anthropic Provider](/providers/ai-sdk-providers/anthropic) (`@ai-sdk/anthropic`)
+- [Amazon Bedrock Provider](/providers/ai-sdk-providers/amazon-bedrock) (`@ai-sdk/amazon-bedrock`)
+- [Google Generative AI Provider](/providers/ai-sdk-providers/google-generative-ai) (`@ai-sdk/google`)
+- [Google Vertex Provider](/providers/ai-sdk-providers/google-vertex) (`@ai-sdk/google-vertex`)
+- [Mistral Provider](/providers/ai-sdk-providers/mistral) (`@ai-sdk/mistral`)
+- [Cohere Provider](/providers/ai-sdk-providers/cohere) (`@ai-sdk/cohere`)
+- [Groq Provider](/providers/ai-sdk-providers/groq) (`@ai-sdk/groq`)
+
+And many more - see the [full list of providers](/docs/foundations/providers-and-models#ai-sdk-providers).
+
+### Community providers
+
+The open-source community has created additional providers:
+
+- [Ollama Provider](/providers/community-providers/ollama) (`ollama-ai-provider`)
+- [OpenRouter Provider](/providers/community-providers/openrouter) (`@openrouter/ai-sdk-provider`)
+- [Cloudflare Workers AI Provider](/providers/community-providers/cloudflare-workers-ai) (`workers-ai-provider`)
+
+And many more - see the [full list of community providers](/docs/foundations/providers-and-models#community-providers).
+
+## Using models
+
+### Basic usage
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-4'),
+  prompt: 'What is the capital of France?',
+});
+
+console.log(result.text);
+```
+
+### Switching providers
+
+Switching providers is as simple as changing the model import:
+
+```ts
+import { generateText } from 'ai';
+import { anthropic } from '@ai-sdk/anthropic';
+
+const result = await generateText({
+  model: anthropic('claude-3-5-sonnet-20241022'),
+  prompt: 'What is the capital of France?',
+});
+
+console.log(result.text);
+```
+
+### Model configuration
+
+Providers can be configured with custom settings:
+
+```ts
+import { openai } from '@ai-sdk/openai';
+
+const customOpenAI = openai({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: 'https://api.openai.com/v1',
+});
+
+const model = customOpenAI('gpt-4');
+```
+
+## Model capabilities
+
+Different models support different capabilities:
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// Image input support
+const result = await generateText({
+  model: openai('gpt-4o'),
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Describe this image.' },
+        { type: 'image', image: imageBuffer },
+      ],
+    },
+  ],
+});
+
+// Tool calling support
+const resultWithTools = await generateText({
+  model: openai('gpt-4'),
+  tools: {
+    weather: tool({
+      description: 'Get the weather in a location',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      execute: async ({ location }) => ({ temperature: 72 }),
+    }),
+  },
+  prompt: 'What is the weather in Paris?',
+});
+```
+
+See the [model capabilities table](/docs/foundations/providers-and-models#model-capabilities) for a detailed comparison.
+
+## Model registry
+
+For dynamic model selection, use the experimental model registry:
+
+```ts
+import { experimental_createModelRegistry as createModelRegistry } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
+
+const registry = createModelRegistry({
+  openai: openai,
+  anthropic: anthropic,
+});
+
+// Use models by string identifier
+const model = registry.languageModel('openai:gpt-4');
+```
+
+## Provider-specific options
+
+You can pass provider-specific options using `providerOptions`:
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('o1'),
+  providerOptions: {
+    openai: {
+      reasoningEffort: 'high',
+    },
+  },
+  prompt: 'Solve this complex problem...',
+});
+```
+
+This allows you to access provider-specific features while maintaining the unified AI SDK interface.

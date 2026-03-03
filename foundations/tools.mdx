@@ -1,0 +1,372 @@
+---
+title: Tools
+description: Learn about tools with the AI SDK
+---
+
+While large language models (LLMs) have incredible generation capabilities, they struggle with discrete tasks (e.g. mathematics) and interacting with the outside world (e.g. getting the weather).
+
+Tools are actions that an LLM can invoke. The results of these actions can be reported back to the LLM to be considered in the next response.
+
+For example, when you ask an LLM for the "weather in London", and there is a weather tool available, it could call a tool with London as the argument. The tool would then fetch the weather data and return it to the LLM. The LLM can then use this information in its response.
+
+## What is a tool?
+
+A tool is an object that can be called by the model to perform a specific task. You can use tools with `generateText` and `streamText` by passing them to the `tools` parameter.
+
+```ts
+import { generateText, tool } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const result = await generateText({
+  model: openai('gpt-4'),
+  tools: {
+    weather: tool({
+      description: 'Get the weather in a location',
+      inputSchema: z.object({
+        location: z.string().describe('The location to get the weather for'),
+      }),
+      execute: async ({ location }) => ({
+        location,
+        temperature: 72,
+        conditions: 'sunny',
+      }),
+    }),
+  },
+  prompt: 'What is the weather in San Francisco?',
+});
+
+console.log(result.text);
+console.log(result.toolCalls);
+console.log(result.toolResults);
+```
+
+## Tool structure
+
+A tool consists of three properties:
+
+### Description
+
+An optional description that influences when the tool is selected:
+
+```ts
+const weatherTool = tool({
+  description: 'Get the current weather in a given location',
+  // ...
+});
+```
+
+### Input schema
+
+A schema that defines and validates the tool's input:
+
+```ts
+import { z } from 'zod';
+
+const weatherTool = tool({
+  inputSchema: z.object({
+    location: z.string().describe('The city and state, e.g. San Francisco, CA'),
+    unit: z.enum(['celsius', 'fahrenheit']).optional(),
+  }),
+  // ...
+});
+```
+
+### Execute function
+
+An async function that is called with the validated input:
+
+```ts
+const weatherTool = tool({
+  description: 'Get the weather in a location',
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  execute: async ({ location }) => {
+    const response = await fetch(
+      `https://api.weather.com/v1/current?location=${location}`
+    );
+    return response.json();
+  },
+});
+```
+
+## Multi-step tool calling
+
+By default, `generateText` stops after a single step. Use `stopWhen` to enable multi-step execution:
+
+```ts
+import { generateText, tool, stepCountIs } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const result = await generateText({
+  model: openai('gpt-4'),
+  tools: {
+    weather: tool({
+      description: 'Get the weather in a location',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      execute: async ({ location }) => ({
+        location,
+        temperature: 72,
+      }),
+    }),
+    cityAttractions: tool({
+      description: 'Get attractions in a city',
+      inputSchema: z.object({
+        city: z.string(),
+      }),
+      execute: async ({ city }) => ({
+        attractions: ['Golden Gate Bridge', 'Alcatraz'],
+      }),
+    }),
+  },
+  prompt: 'What is the weather in San Francisco and what should I visit?',
+  stopWhen: stepCountIs(10), // Allow up to 10 steps
+});
+```
+
+For streaming, use `streamText` with the same configuration:
+
+```ts
+import { streamText } from 'ai';
+
+const result = streamText({
+  model: openai('gpt-4'),
+  tools: { /* ... */ },
+  prompt: 'What is the weather in San Francisco?',
+  stopWhen: stepCountIs(10),
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+## Tool choice
+
+Control when tools are called using the `toolChoice` parameter:
+
+### Auto (default)
+
+Let the model decide whether to call tools:
+
+```ts
+const result = await generateText({
+  model: openai('gpt-4'),
+  tools: { weather },
+  toolChoice: 'auto', // default
+  prompt: 'What is the weather in San Francisco?',
+});
+```
+
+### Required
+
+Force the model to call at least one tool:
+
+```ts
+const result = await generateText({
+  model: openai('gpt-4'),
+  tools: { weather },
+  toolChoice: 'required',
+  prompt: 'What is the weather in San Francisco?',
+});
+```
+
+### None
+
+Prevent the model from calling any tools:
+
+```ts
+const result = await generateText({
+  model: openai('gpt-4'),
+  tools: { weather },
+  toolChoice: 'none',
+  prompt: 'Tell me about San Francisco',
+});
+```
+
+### Specific tool
+
+Force the model to call a specific tool:
+
+```ts
+const result = await generateText({
+  model: openai('gpt-4'),
+  tools: { weather, attractions },
+  toolChoice: {
+    type: 'tool',
+    toolName: 'weather',
+  },
+  prompt: 'What is the weather in San Francisco?',
+});
+```
+
+## Schema types
+
+The AI SDK supports multiple schema libraries:
+
+### Zod
+
+```ts
+import { z } from 'zod';
+import { tool } from 'ai';
+
+const weatherTool = tool({
+  inputSchema: z.object({
+    location: z.string(),
+    unit: z.enum(['celsius', 'fahrenheit']),
+  }),
+  execute: async ({ location, unit }) => { /* ... */ },
+});
+```
+
+### JSON Schema
+
+```ts
+import { jsonSchema, tool } from 'ai';
+
+const weatherTool = tool({
+  inputSchema: jsonSchema({
+    type: 'object',
+    properties: {
+      location: { type: 'string' },
+      unit: { type: 'string', enum: ['celsius', 'fahrenheit'] },
+    },
+    required: ['location'],
+  }),
+  execute: async (input) => { /* ... */ },
+});
+```
+
+## Accessing tool results
+
+After generation, you can access tool calls and results:
+
+```ts
+const result = await generateText({
+  model: openai('gpt-4'),
+  tools: { weather },
+  prompt: 'What is the weather in San Francisco?',
+});
+
+// Tool calls made by the model
+console.log(result.toolCalls);
+// [
+//   {
+//     toolCallId: 'call_1',
+//     toolName: 'weather',
+//     input: { location: 'San Francisco' }
+//   }
+// ]
+
+// Tool results from execution
+console.log(result.toolResults);
+// [
+//   {
+//     toolCallId: 'call_1',
+//     toolName: 'weather',
+//     output: { location: 'San Francisco', temperature: 72, conditions: 'sunny' }
+//   }
+// ]
+```
+
+## Streaming tool calls
+
+With `streamText`, you can stream tool calls and results:
+
+```ts
+import { streamText } from 'ai';
+
+const result = streamText({
+  model: openai('gpt-4'),
+  tools: { weather },
+  prompt: 'What is the weather in San Francisco?',
+});
+
+for await (const part of result.fullStream) {
+  switch (part.type) {
+    case 'tool-call':
+      console.log('Tool call:', part);
+      break;
+    case 'tool-result':
+      console.log('Tool result:', part);
+      break;
+    case 'text-delta':
+      process.stdout.write(part.text);
+      break;
+  }
+}
+```
+
+## Error handling
+
+Handle errors in tool execution:
+
+```ts
+const weatherTool = tool({
+  description: 'Get the weather in a location',
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  execute: async ({ location }) => {
+    try {
+      const response = await fetch(
+        `https://api.weather.com/v1/current?location=${location}`
+      );
+      
+      if (!response.ok) {
+        throw new Error(`Weather API error: ${response.statusText}`);
+      }
+      
+      return response.json();
+    } catch (error) {
+      console.error('Weather tool error:', error);
+      throw error; // Error will be included in tool results
+    }
+  },
+});
+```
+
+Errors are captured in `toolResults`:
+
+```ts
+const result = await generateText({
+  model: openai('gpt-4'),
+  tools: { weather: weatherTool },
+  prompt: 'What is the weather?',
+});
+
+// Check for errors
+for (const toolResult of result.toolResults) {
+  if (toolResult.type === 'tool-error') {
+    console.error('Tool error:', toolResult.error);
+  }
+}
+```
+
+## Tool packages
+
+Tools can be packaged and distributed through npm. Many ready-to-use tool packages are available:
+
+```bash
+pnpm add @tavily/ai-sdk
+```
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { tavilySearchTool } from '@tavily/ai-sdk';
+
+const result = await generateText({
+  model: openai('gpt-4'),
+  tools: {
+    search: tavilySearchTool,
+  },
+  prompt: 'What are the latest developments in AI?',
+});
+```
+
+See the [tools documentation](/docs/foundations/tools#toolsets) for a comprehensive list of available tool packages.

@@ -1,0 +1,374 @@
+---
+title: Natural Language to Postgres
+description: Build an app that converts natural language to SQL queries and visualizes results with the AI SDK
+---
+
+# Natural Language to Postgres
+
+Learn how to build an application that lets users query a PostgreSQL database using natural language, with automatic chart generation and query explanations.
+
+## What You'll Build
+
+An application that:
+
+1. Converts natural language to SQL queries
+2. Executes queries against PostgreSQL
+3. Generates charts to visualize results
+4. Explains SQL queries in plain English
+
+[View live demo](https://natural-language-postgres.vercel.app)
+
+## Prerequisites
+
+- Node.js 18+
+- PostgreSQL database (Vercel Postgres recommended)
+- Vercel AI Gateway API key
+- Basic knowledge of SQL and Next.js
+
+## Setup
+
+Clone the starter repository:
+
+```bash
+git clone https://github.com/vercel-labs/natural-language-postgres
+cd natural-language-postgres
+git checkout starter
+pnpm install
+```
+
+Configure environment variables:
+
+```bash
+cp .env.example .env
+```
+
+```env filename=".env"
+AI_GATEWAY_API_KEY="your_api_key"
+POSTGRES_URL="your_postgres_url"
+```
+
+Download and seed the database:
+
+1. Get the [CB Insights Unicorn Companies dataset](https://www.cbinsights.com/research-unicorn-companies)
+2. Save as `unicorns.csv` in project root
+3. Run: `pnpm run seed`
+
+## Implementation
+
+### Generate SQL from Natural Language
+
+Create a server action that converts questions to SQL:
+
+```ts filename="app/actions.ts"
+import { generateText, Output } from 'ai';
+import { z } from 'zod';
+
+export const generateQuery = async (input: string) => {
+  'use server';
+  try {
+    const result = await generateText({
+      model: 'openai/gpt-4o',
+      system: `You are a SQL (postgres) and data visualization expert. Your job is to help the user write a SQL query to retrieve the data they need.
+      
+      The table schema is:
+      unicorns (
+        id SERIAL PRIMARY KEY,
+        company VARCHAR(255) NOT NULL UNIQUE,
+        valuation DECIMAL(10, 2) NOT NULL,
+        date_joined DATE,
+        country VARCHAR(255) NOT NULL,
+        city VARCHAR(255) NOT NULL,
+        industry VARCHAR(255) NOT NULL,
+        select_investors TEXT NOT NULL
+      );
+      
+      Only retrieval queries are allowed.
+      
+      For string fields, use ILIKE and LOWER() for case-insensitive matching:
+      LOWER(industry) ILIKE LOWER('%search_term%')
+      
+      Note: select_investors is comma-separated. Trim whitespace when grouping.
+      Note: valuation is in billions (10b = 10.0)
+      Note: Return rates as decimals (0.1 = 10%)
+      
+      EVERY QUERY SHOULD RETURN QUANTITATIVE DATA THAT CAN BE PLOTTED!
+      Always return at least two columns.`,
+      prompt: `Generate the query necessary to retrieve the data the user wants: ${input}`,
+      output: Output.object({
+        schema: z.object({
+          query: z.string(),
+        }),
+      }),
+    });
+    return result.output.query;
+  } catch (e) {
+    console.error(e);
+    throw new Error('Failed to generate query');
+  }
+};
+```
+
+### Execute Generated Queries
+
+Run the SQL query against your database:
+
+```ts filename="app/actions.ts"
+import { sql } from '@vercel/postgres';
+
+export const runGeneratedSQLQuery = async (query: string) => {
+  'use server';
+  try {
+    const result = await sql.query(query);
+    return result.rows;
+  } catch (e) {
+    console.error(e);
+    throw new Error('Failed to run query');
+  }
+};
+```
+
+### Explain SQL Queries
+
+Generate plain English explanations of SQL queries:
+
+```ts filename="app/actions.ts"
+import { explanationSchema } from '@/lib/types';
+
+export const explainQuery = async (input: string, sqlQuery: string) => {
+  'use server';
+  try {
+    const result = await generateText({
+      model: 'openai/gpt-4o',
+      system: `You are a SQL expert. Explain queries by breaking them into sections.
+      
+      Example sections: "SELECT *", "FROM unicorns", "WHERE industry = 'fintech'"
+      If a section has no explanation, include it but leave explanation empty.`,
+      prompt: `Explain this SQL query in simple terms:
+      
+      User Query: ${input}
+      SQL Query: ${sqlQuery}`,
+      output: Output.array({ element: explanationSchema }),
+    });
+    return result.output;
+  } catch (e) {
+    console.error(e);
+    throw new Error('Failed to explain query');
+  }
+};
+```
+
+The explanation schema:
+
+```ts filename="lib/types.ts"
+import { z } from 'zod';
+
+export const explanationSchema = z.object({
+  section: z.string(),
+  explanation: z.string(),
+});
+
+export type QueryExplanation = z.infer<typeof explanationSchema>;
+```
+
+### Generate Chart Configuration
+
+Create chart configs based on query results:
+
+```ts filename="app/actions.ts"
+import { configSchema, Result } from '@/lib/types';
+
+export const generateChartConfig = async (
+  results: Result[],
+  userQuery: string,
+) => {
+  'use server';
+
+  try {
+    const { output: config } = await generateText({
+      model: 'openai/gpt-4o',
+      system: 'You are a data visualization expert.',
+      prompt: `Given this data from a SQL query, generate the best chart config:
+      
+      Example config:
+      {
+        type: "bar",
+        xKey: "month",
+        yKeys: ["sales", "profit"],
+        colors: {
+          sales: "#4CAF50",
+          profit: "#2196F3"
+        },
+        legend: true
+      }
+      
+      User Query: ${userQuery}
+      Data: ${JSON.stringify(results, null, 2)}`,
+      output: Output.object({ schema: configSchema }),
+    });
+
+    // Override with theme colors
+    const colors: Record<string, string> = {};
+    config.yKeys.forEach((key, index) => {
+      colors[key] = `hsl(var(--chart-${index + 1}))`;
+    });
+
+    return { config: { ...config, colors } };
+  } catch (e) {
+    console.error(e);
+    throw new Error('Failed to generate chart suggestion');
+  }
+};
+```
+
+The config schema:
+
+```ts filename="lib/types.ts"
+export const configSchema = z
+  .object({
+    description: z.string().describe('What the chart shows'),
+    takeaway: z.string().describe('Main takeaway from the chart'),
+    type: z.enum(['bar', 'line', 'area', 'pie']),
+    title: z.string(),
+    xKey: z.string().describe('Key for x-axis or category'),
+    yKeys: z
+      .array(z.string())
+      .describe('Quantitative column(s) for y-axis'),
+    colors: z.record(z.string(), z.string()).optional(),
+    legend: z.boolean(),
+  })
+  .describe('Chart configuration object');
+
+export type Config = z.infer<typeof configSchema>;
+```
+
+### Frontend Integration
+
+Use the server actions in your Next.js page:
+
+```tsx filename="app/page.tsx"
+'use client';
+
+import { useState } from 'react';
+import { generateQuery, runGeneratedSQLQuery, generateChartConfig } from './actions';
+
+export default function Home() {
+  const [activeQuery, setActiveQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [chartConfig, setChartConfig] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (question: string) => {
+    setLoading(true);
+
+    try {
+      // Generate SQL query
+      const query = await generateQuery(question);
+      setActiveQuery(query);
+
+      // Execute query
+      const data = await runGeneratedSQLQuery(query);
+      setResults(data);
+
+      // Generate chart
+      const { config } = await generateChartConfig(data, question);
+      setChartConfig(config);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <input
+        type="text"
+        placeholder="Ask a question about the data..."
+        onSubmit={e => handleSubmit(e.target.value)}
+      />
+      
+      {loading && <div>Loading...</div>}
+      
+      {activeQuery && (
+        <div>
+          <h3>Generated SQL:</h3>
+          <code>{activeQuery}</code>
+        </div>
+      )}
+      
+      {results.length > 0 && (
+        <div>
+          <h3>Results:</h3>
+          {/* Render table or chart based on chartConfig */}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+## Key Concepts
+
+### Structured Output
+
+Using `Output.object()` ensures the model returns properly formatted data:
+
+```ts
+output: Output.object({
+  schema: z.object({
+    query: z.string(),
+  }),
+})
+```
+
+### Schema Descriptions
+
+Add `.describe()` to schema fields to guide the model:
+
+```ts
+yKeys: z.array(z.string()).describe('Quantitative column(s) for y-axis')
+```
+
+### Chain of Thought
+
+Asking for `description` and `takeaway` first helps the model generate better configs:
+
+```ts
+description: z.string().describe('What the chart shows'),
+takeaway: z.string().describe('Main takeaway'),
+// ... then technical fields
+```
+
+## Running the Application
+
+```bash
+pnpm run dev
+```
+
+Try these queries:
+
+- "How many unicorns are from San Francisco?"
+- "What are the top 5 industries by total valuation?"
+- "Show me the growth of unicorns over time"
+
+## Best Practices
+
+1. **Schema Context**: Provide complete table schema in system prompt
+2. **Edge Cases**: Document data quirks (comma-separated fields, null handling)
+3. **Constraints**: Explicitly state allowed operations (e.g., no DELETE/UPDATE)
+4. **Examples**: Include example queries for complex patterns
+5. **Validation**: Always validate and sanitize generated SQL
+
+## Next Steps
+
+- Add support for JOINs across multiple tables
+- Implement query result caching
+- Add query history and favorites
+- Support more chart types
+- Add export to CSV/PDF
+
+## Resources
+
+- [Full source code](https://github.com/vercel-labs/natural-language-postgres)
+- [Structured output documentation](/docs/ai-sdk-core/structured-output)
+- [Zod documentation](https://zod.dev)

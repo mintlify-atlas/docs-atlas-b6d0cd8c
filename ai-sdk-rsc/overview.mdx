@@ -1,0 +1,180 @@
+---
+title: AI SDK RSC Overview
+description: Learn about React Server Components integration with the AI SDK for building streaming AI interfaces
+---
+
+# AI SDK RSC Overview
+
+AI SDK RSC provides a set of utilities for building AI-powered applications with React Server Components. It enables you to stream React components from the server to the client, manage AI and UI state, and create generative user interfaces.
+
+<Warning>
+  AI SDK RSC is currently experimental. We recommend using [AI SDK UI](/docs/ai-sdk-ui/overview) for production applications.
+</Warning>
+
+## Core Concepts
+
+The AI SDK RSC package provides three main capabilities:
+
+### 1. Streaming UI Components
+
+Stream React components directly from language model responses using `streamUI` and `createStreamableUI`.
+
+```tsx
+import { streamUI } from '@ai-sdk/rsc';
+import { openai } from '@ai-sdk/openai';
+
+const result = await streamUI({
+  model: openai('gpt-4'),
+  prompt: 'What is the weather like?',
+  text: ({ content }) => <div>{content}</div>,
+});
+```
+
+### 2. State Management
+
+Manage both AI state (conversation history) and UI state (rendered components) using `createAI`.
+
+```tsx
+import { createAI } from '@ai-sdk/rsc';
+
+const AI = createAI({
+  actions: {
+    continueConversation,
+  },
+  initialAIState: [],
+  initialUIState: [],
+});
+```
+
+### 3. Generative UI
+
+Generate dynamic UI components based on tool calls and model responses.
+
+```tsx
+const result = await streamUI({
+  model: openai('gpt-4'),
+  tools: {
+    showWeather: {
+      description: 'Show weather information',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      generate: async ({ location }) => {
+        return <WeatherCard location={location} />;
+      },
+    },
+  },
+});
+```
+
+## Key APIs
+
+### Server-Side APIs
+
+- **`streamUI`**: Create streamable UI from language models
+- **`createStreamableUI`**: Manually create streamable UI components
+- **`createStreamableValue`**: Create streamable primitive values
+- **`getAIState`**: Access current AI state
+- **`getMutableAIState`**: Access and modify AI state
+- **`createAI`**: Create AI context provider
+
+### Client-Side APIs
+
+- **`useUIState`**: Access UI state on the client
+- **`useAIState`**: Access AI state on the client
+- **`useActions`**: Access server actions on the client
+- **`useStreamableValue`**: Read streamable values on the client
+- **`readStreamableValue`**: Read streamable values without React
+
+## Installation
+
+```bash
+pnpm install @ai-sdk/rsc ai
+```
+
+## Basic Example
+
+Here's a complete example using AI SDK RSC:
+
+```tsx file="app/actions.tsx"
+'use server';
+
+import { streamUI } from '@ai-sdk/rsc';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+export async function continueConversation(input: string) {
+  const result = await streamUI({
+    model: openai('gpt-4'),
+    prompt: input,
+    text: ({ content }) => <div>{content}</div>,
+    tools: {
+      getWeather: {
+        description: 'Get weather information',
+        inputSchema: z.object({
+          location: z.string(),
+        }),
+        generate: async ({ location }) => {
+          const data = await fetchWeather(location);
+          return (
+            <div>
+              <h2>Weather in {location}</h2>
+              <p>Temperature: {data.temp}°C</p>
+            </div>
+          );
+        },
+      },
+    },
+  });
+
+  return result.value;
+}
+```
+
+```tsx file="app/page.tsx"
+'use client';
+
+import { useState } from 'react';
+import { continueConversation } from './actions';
+
+export default function Chat() {
+  const [messages, setMessages] = useState([]);
+
+  const handleSubmit = async (input: string) => {
+    const response = await continueConversation(input);
+    setMessages([...messages, response]);
+  };
+
+  return (
+    <div>
+      {messages.map((message, i) => (
+        <div key={i}>{message}</div>
+      ))}
+    </div>
+  );
+}
+```
+
+## Use Cases
+
+AI SDK RSC is particularly useful for:
+
+- **Dynamic UI Generation**: Create interfaces that adapt based on AI responses
+- **Server-Side AI Processing**: Keep API keys and heavy processing on the server
+- **Streaming Interfaces**: Show progressive results as the model generates them
+- **Complex Tool Integrations**: Render custom components for each tool call
+
+## Architecture
+
+The AI SDK RSC uses React Server Components to:
+
+1. Execute AI operations on the server
+2. Stream React components to the client
+3. Maintain state synchronization between server and client
+4. Enable progressive rendering of AI-generated content
+
+## Next Steps
+
+- Learn about [Streaming React Components](/docs/ai-sdk-rsc/streaming-react-components)
+- Explore [Generative UI](/docs/ai-sdk-rsc/generative-ui) patterns
+- Check the [API Reference](/docs/reference/ai-sdk-rsc)

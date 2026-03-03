@@ -1,0 +1,303 @@
+---
+title: tool
+description: API reference for the tool function
+---
+
+Defines a tool that can be called by AI language models.
+
+Tools allow models to perform actions or retrieve information beyond text generation.
+
+```typescript
+import { tool } from 'ai';
+import { z } from 'zod';
+
+const weatherTool = tool({
+  description: 'Get the weather for a location',
+  inputSchema: z.object({
+    location: z.string().describe('The city and state, e.g. San Francisco, CA'),
+    unit: z.enum(['celsius', 'fahrenheit']).optional(),
+  }),
+  execute: async ({ location, unit = 'fahrenheit' }) => {
+    const weather = await fetchWeather(location, unit);
+    return weather;
+  },
+});
+```
+
+## Parameters
+
+<ParamField path="description" type="string">
+  An optional description of what the tool does.
+  Will be used by the language model to decide whether to use the tool.
+  Not used for provider-defined tools.
+</ParamField>
+
+<ParamField path="title" type="string">
+  An optional title of the tool.
+</ParamField>
+
+<ParamField path="inputSchema" type="FlexibleSchema<INPUT>" required>
+  The schema of the input that the tool expects.
+  The language model will use this to generate the input.
+  It is also used to validate the output of the language model.
+  
+  You can use descriptions on the schema properties to make the input understandable for the language model.
+</ParamField>
+
+<ParamField path="outputSchema" type="FlexibleSchema<OUTPUT>">
+  Optional schema for the output of the tool.
+  Used for type validation of the tool's return value.
+</ParamField>
+
+<ParamField path="execute" type="(input: INPUT, options: ToolExecutionOptions) => OUTPUT | Promise<OUTPUT> | AsyncIterable<OUTPUT>">
+  An async function that is called with the arguments from the tool call and produces a result.
+  If not provided, the tool will not be executed automatically.
+</ParamField>
+
+<ParamField path="inputExamples" type="Array<{ input: INPUT }>">
+  An optional list of input examples that show the language model what the input should look like.
+</ParamField>
+
+<ParamField path="needsApproval" type="boolean | ((input: INPUT, options) => boolean | Promise<boolean>)">
+  Whether the tool needs approval before it can be executed.
+  Can be a boolean or a function that receives the input and returns a boolean.
+</ParamField>
+
+<ParamField path="strict" type="boolean">
+  Strict mode setting for the tool.
+  
+  Providers that support strict mode will use this setting to determine
+  how the input should be generated. Strict mode will always produce
+  valid inputs, but it might limit what input schemas are supported.
+</ParamField>
+
+<ParamField path="onInputStart" type="(options: ToolExecutionOptions) => void | Promise<void>">
+  Optional function that is called when the argument streaming starts.
+  Only called when the tool is used in a streaming context.
+</ParamField>
+
+<ParamField path="onInputDelta" type="(options: { inputTextDelta: string } & ToolExecutionOptions) => void | Promise<void>">
+  Optional function that is called when an argument streaming delta is available.
+  Only called when the tool is used in a streaming context.
+</ParamField>
+
+<ParamField path="onInputAvailable" type="(options: { input: INPUT } & ToolExecutionOptions) => void | Promise<void>">
+  Optional function that is called when a tool call can be started,
+  even if the execute function is not provided.
+</ParamField>
+
+<ParamField path="toModelOutput" type="(options: { toolCallId: string; input: INPUT; output: OUTPUT }) => ToolResultOutput | Promise<ToolResultOutput>">
+  Optional conversion function that maps the tool result to an output that can be used by the language model.
+  
+  If not provided, the tool result will be sent as a JSON object.
+</ParamField>
+
+<ParamField path="providerOptions" type="ProviderOptions">
+  Additional provider-specific metadata. They are passed through
+  to the provider from the AI SDK and enable provider-specific
+  functionality that can be fully encapsulated in the provider.
+</ParamField>
+
+## Tool Execution Options
+
+When the `execute` function is called, it receives these options:
+
+<ParamField path="toolCallId" type="string">
+  The ID of the tool call. You can use it e.g. when sending tool-call related information with stream data.
+</ParamField>
+
+<ParamField path="messages" type="Array<ModelMessage>">
+  Messages that were sent to the language model to initiate the response that contained the tool call.
+  The messages **do not** include the system prompt nor the assistant response that contained the tool call.
+</ParamField>
+
+<ParamField path="abortSignal" type="AbortSignal">
+  An optional abort signal that indicates that the overall operation should be aborted.
+</ParamField>
+
+<ParamField path="experimental_context" type="unknown">
+  User-defined context that flows through the execution.
+</ParamField>
+
+## Returns
+
+Returns a `Tool` object with type information inferred from the input and output schemas.
+
+## Examples
+
+### Basic tool
+
+```typescript
+import { tool } from 'ai';
+import { z } from 'zod';
+
+const weatherTool = tool({
+  description: 'Get the weather for a location',
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  execute: async ({ location }) => {
+    const response = await fetch(
+      `https://api.weather.com/v1/weather?location=${location}`
+    );
+    return response.json();
+  },
+});
+```
+
+### Tool with detailed schema
+
+```typescript
+import { tool } from 'ai';
+import { z } from 'zod';
+
+const searchTool = tool({
+  description: 'Search for information on the web',
+  inputSchema: z.object({
+    query: z.string().describe('The search query'),
+    maxResults: z.number().optional().describe('Maximum number of results to return'),
+    dateRange: z.object({
+      from: z.string().describe('Start date in ISO format'),
+      to: z.string().describe('End date in ISO format'),
+    }).optional().describe('Optional date range to filter results'),
+  }),
+  execute: async ({ query, maxResults = 10, dateRange }) => {
+    const results = await searchAPI(query, maxResults, dateRange);
+    return results;
+  },
+});
+```
+
+### Tool with approval
+
+```typescript
+import { tool } from 'ai';
+import { z } from 'zod';
+
+const deleteTool = tool({
+  description: 'Delete a file from the system',
+  inputSchema: z.object({
+    filePath: z.string(),
+  }),
+  needsApproval: true, // Requires approval before execution
+  execute: async ({ filePath }) => {
+    await deleteFile(filePath);
+    return { success: true, deleted: filePath };
+  },
+});
+```
+
+### Tool with conditional approval
+
+```typescript
+import { tool } from 'ai';
+import { z } from 'zod';
+
+const transferTool = tool({
+  description: 'Transfer money between accounts',
+  inputSchema: z.object({
+    from: z.string(),
+    to: z.string(),
+    amount: z.number(),
+  }),
+  needsApproval: ({ amount }) => amount > 1000, // Only needs approval for large transfers
+  execute: async ({ from, to, amount }) => {
+    await transferMoney(from, to, amount);
+    return { success: true, amount, from, to };
+  },
+});
+```
+
+### Tool with streaming output
+
+```typescript
+import { tool } from 'ai';
+import { z } from 'zod';
+
+const streamingTool = tool({
+  description: 'Process data in chunks',
+  inputSchema: z.object({
+    data: z.array(z.string()),
+  }),
+  execute: async function* ({ data }) {
+    for (const item of data) {
+      const processed = await processItem(item);
+      yield processed; // Stream each processed item
+    }
+  },
+});
+```
+
+### Tool with callbacks
+
+```typescript
+import { tool } from 'ai';
+import { z } from 'zod';
+
+const analysisTool = tool({
+  description: 'Analyze text content',
+  inputSchema: z.object({
+    text: z.string(),
+  }),
+  onInputStart: ({ toolCallId }) => {
+    console.log('Starting analysis:', toolCallId);
+  },
+  onInputAvailable: async ({ input, toolCallId }) => {
+    console.log('Input available:', { toolCallId, length: input.text.length });
+  },
+  execute: async ({ text }) => {
+    const analysis = await analyzeText(text);
+    return analysis;
+  },
+});
+```
+
+### Tool with custom model output
+
+```typescript
+import { tool } from 'ai';
+import { z } from 'zod';
+
+const dataTool = tool({
+  description: 'Fetch data',
+  inputSchema: z.object({
+    id: z.string(),
+  }),
+  execute: async ({ id }) => {
+    return await fetchData(id);
+  },
+  toModelOutput: ({ output }) => {
+    // Customize how the output is sent back to the model
+    return {
+      type: 'json' as const,
+      data: JSON.stringify({
+        summary: output.summary,
+        // Only send relevant fields to the model
+      }),
+    };
+  },
+});
+```
+
+### Tool with output schema
+
+```typescript
+import { tool } from 'ai';
+import { z } from 'zod';
+
+const validatedTool = tool({
+  description: 'Get user information',
+  inputSchema: z.object({
+    userId: z.string(),
+  }),
+  outputSchema: z.object({
+    id: z.string(),
+    name: z.string(),
+    email: z.string().email(),
+  }),
+  execute: async ({ userId }) => {
+    const user = await getUser(userId);
+    return user; // Type-checked against outputSchema
+  },
+});
+```

@@ -1,0 +1,234 @@
+---
+title: Azure OpenAI Provider
+description: Learn how to use Azure OpenAI Service with the AI SDK for enterprise deployments.
+---
+
+# Azure OpenAI Provider
+
+The Azure OpenAI provider enables you to use OpenAI models through Microsoft Azure with enterprise features, security, and compliance.
+
+## Installation
+
+<CodeGroup>
+```bash npm
+npm install @ai-sdk/azure
+```
+
+```bash pnpm
+pnpm add @ai-sdk/azure
+```
+
+```bash yarn
+yarn add @ai-sdk/azure
+```
+
+```bash bun
+bun add @ai-sdk/azure
+```
+</CodeGroup>
+
+## Setup
+
+Get your credentials from the Azure Portal and set them as environment variables:
+
+```bash
+AZURE_RESOURCE_NAME=your-resource-name
+AZURE_API_KEY=your-api-key
+```
+
+## Usage
+
+### Basic Text Generation
+
+```typescript
+import { azure } from '@ai-sdk/azure';
+import { generateText } from 'ai';
+
+const { text } = await generateText({
+  model: azure('your-gpt-4-deployment'),
+  prompt: 'Explain enterprise AI solutions.',
+});
+```
+
+### Streaming Responses
+
+```typescript
+import { azure } from '@ai-sdk/azure';
+import { streamText } from 'ai';
+
+const result = streamText({
+  model: azure('your-gpt-4-deployment'),
+  prompt: 'Write about cloud security.',
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### Structured Output
+
+```typescript
+import { azure } from '@ai-sdk/azure';
+import { generateObject } from 'ai';
+import { z } from 'zod';
+
+const { object } = await generateObject({
+  model: azure('your-gpt-4-deployment'),
+  schema: z.object({
+    risks: z.array(z.string()),
+    recommendations: z.array(z.string()),
+  }),
+  prompt: 'Analyze security risks.',
+});
+```
+
+## Configuration
+
+### Custom Provider Instance
+
+```typescript
+import { createAzure } from '@ai-sdk/azure';
+
+const azure = createAzure({
+  resourceName: 'your-resource-name',
+  apiKey: process.env.AZURE_API_KEY,
+});
+```
+
+### Provider Options
+
+- **resourceName**: Your Azure resource name
+- **apiKey**: Azure OpenAI API key
+- **apiVersion**: API version (defaults to 'v1')
+- **baseURL**: Custom endpoint URL
+
+## Available Models
+
+You can deploy the following OpenAI models on Azure:
+
+### Chat Models
+
+- GPT-4 Turbo
+- GPT-4
+- GPT-3.5 Turbo
+
+### Embeddings
+
+```typescript
+import { azure } from '@ai-sdk/azure';
+import { embed } from 'ai';
+
+const { embedding } = await embed({
+  model: azure.embedding('your-embedding-deployment'),
+  value: 'Enterprise document',
+});
+```
+
+**Available Models:**
+- text-embedding-3-small
+- text-embedding-3-large
+- text-embedding-ada-002
+
+### Image Generation
+
+```typescript
+import { azure } from '@ai-sdk/azure';
+import { generateImage } from 'ai';
+
+const { image } = await generateImage({
+  model: azure.image('your-dalle-deployment'),
+  prompt: 'Professional office space',
+  size: '1024x1024',
+});
+```
+
+**Available Models:**
+- DALL-E 3
+- DALL-E 2
+
+## Advanced Features
+
+### Tool Calling
+
+```typescript
+import { azure } from '@ai-sdk/azure';
+import { generateText } from 'ai';
+import { z } from 'zod';
+
+const result = await generateText({
+  model: azure('your-gpt-4-deployment'),
+  tools: {
+    database_query: {
+      description: 'Query the database',
+      parameters: z.object({
+        query: z.string(),
+      }),
+      execute: async ({ query }) => {
+        return { results: [] };
+      },
+    },
+  },
+  prompt: 'Find all users from last month.',
+});
+```
+
+### Vision
+
+```typescript
+import { azure } from '@ai-sdk/azure';
+import { generateText } from 'ai';
+import fs from 'fs';
+
+const result = await generateText({
+  model: azure('your-gpt-4-vision-deployment'),
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Analyze this chart.' },
+        { type: 'image', image: fs.readFileSync('./chart.png') },
+      ],
+    },
+  ],
+});
+```
+
+### PDF Support
+
+```typescript
+import { azure } from '@ai-sdk/azure';
+import { generateText } from 'ai';
+import fs from 'fs';
+
+const result = await generateText({
+  model: azure('your-gpt-4-deployment'),
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Review this contract.' },
+        {
+          type: 'file',
+          data: fs.readFileSync('./contract.pdf'),
+          mediaType: 'application/pdf',
+        },
+      ],
+    },
+  ],
+});
+```
+
+## Deployment Notes
+
+- Create deployments in the Azure Portal before use
+- Each deployment has its own name and configuration
+- Deployment names are used as model identifiers
+- Supports virtual network integration
+- Provides managed identity authentication
+
+## Resources
+
+- [Azure OpenAI Documentation](https://azure.microsoft.com/en-us/products/ai-services/openai-service)
+- [AI SDK Documentation](/docs)
+- [Azure Portal](https://portal.azure.com/)

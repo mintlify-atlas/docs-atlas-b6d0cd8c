@@ -1,0 +1,214 @@
+---
+title: Speech
+description: Learn how to generate speech from text with the AI SDK.
+---
+
+# Speech
+
+<Note type="warning">Speech generation is an experimental feature.</Note>
+
+The AI SDK provides the [`generateSpeech`](/docs/reference/ai-sdk-core/generate-speech)
+function to generate speech from text using a speech model.
+
+```ts
+import { experimental_generateSpeech as generateSpeech } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateSpeech({
+  model: openai.speech('tts-1'),
+  text: 'Hello, world!',
+  voice: 'alloy',
+});
+```
+
+To access the generated audio:
+
+```ts
+const audioData = result.audio.uint8Array; // audio data as Uint8Array
+// or
+const audioBase64 = result.audio.base64; // audio data as base64 string
+```
+
+## Settings
+
+### Voice Selection
+
+Different models support different voices. Refer to your provider's documentation for available voices:
+
+```ts highlight="6"
+import { experimental_generateSpeech as generateSpeech } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateSpeech({
+  model: openai.speech('tts-1'),
+  text: 'Hello, world!',
+  voice: 'nova', // Options: alloy, echo, fable, onyx, nova, shimmer
+});
+```
+
+### Output Format
+
+You can specify the desired output format for the audio:
+
+```ts highlight="7"
+import { experimental_generateSpeech as generateSpeech } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateSpeech({
+  model: openai.speech('tts-1'),
+  text: 'Hello, world!',
+  voice: 'alloy',
+  outputFormat: 'mp3', // Options: mp3, wav, opus, aac, flac, etc.
+});
+```
+
+### Speech Speed
+
+Some models support adjusting the speed of the generated speech:
+
+```ts highlight="7"
+import { experimental_generateSpeech as generateSpeech } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateSpeech({
+  model: openai.speech('tts-1'),
+  text: 'Hello, world!',
+  voice: 'alloy',
+  speed: 1.25, // Speed multiplier (0.25 to 4.0)
+});
+```
+
+### Language Setting
+
+You can specify the language for speech generation (provider support varies):
+
+```ts highlight="7"
+import { experimental_generateSpeech as generateSpeech } from 'ai';
+import { lmnt } from '@ai-sdk/lmnt';
+
+const result = await generateSpeech({
+  model: lmnt.speech('aurora'),
+  text: 'Hola, mundo!',
+  language: 'es', // Spanish (ISO 639-1 language code)
+});
+```
+
+### Instructions
+
+Some models accept additional instructions to guide the speech generation:
+
+```ts highlight="7"
+import { experimental_generateSpeech as generateSpeech } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateSpeech({
+  model: openai.speech('tts-1'),
+  text: 'Hello, world!',
+  voice: 'alloy',
+  instructions: 'Speak in a slow and steady tone',
+});
+```
+
+### Provider-Specific Settings
+
+You can set model-specific settings with the `providerOptions` parameter:
+
+```ts highlight="7-11"
+import { experimental_generateSpeech as generateSpeech } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateSpeech({
+  model: openai.speech('tts-1'),
+  text: 'Hello, world!',
+  voice: 'alloy',
+  providerOptions: {
+    openai: {
+      // provider-specific options
+    },
+  },
+});
+```
+
+### Retries
+
+The `generateSpeech` function accepts an optional `maxRetries` parameter
+that you can use to set the maximum number of retries.
+It defaults to `2` retries (3 attempts in total). You can set it to `0` to disable retries.
+
+```ts highlight="7"
+import { experimental_generateSpeech as generateSpeech } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateSpeech({
+  model: openai.speech('tts-1'),
+  text: 'Hello, world!',
+  voice: 'alloy',
+  maxRetries: 0, // Disable retries
+});
+```
+
+### Abort Signals and Timeouts
+
+`generateSpeech` accepts an optional `abortSignal` parameter of
+type [`AbortSignal`](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal)
+that you can use to abort the speech generation process or set a timeout.
+
+```ts highlight="7"
+import { experimental_generateSpeech as generateSpeech } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateSpeech({
+  model: openai.speech('tts-1'),
+  text: 'Hello, world!',
+  voice: 'alloy',
+  abortSignal: AbortSignal.timeout(10000), // Abort after 10 seconds
+});
+```
+
+### Custom Headers
+
+`generateSpeech` accepts an optional `headers` parameter of type `Record<string, string>`
+that you can use to add custom headers to the speech generation request.
+
+```ts highlight="7"
+import { experimental_generateSpeech as generateSpeech } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateSpeech({
+  model: openai.speech('tts-1'),
+  text: 'Hello, world!',
+  voice: 'alloy',
+  headers: { 'X-Custom-Header': 'custom-value' },
+});
+```
+
+## Response Information
+
+The `generateSpeech` function returns comprehensive response information:
+
+```ts highlight="6"
+import { experimental_generateSpeech as generateSpeech } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateSpeech({
+  model: openai.speech('tts-1'),
+  text: 'Hello, world!',
+  voice: 'alloy',
+});
+
+console.log(result.audio); // Generated audio file
+console.log(result.warnings); // Any warnings from the provider
+console.log(result.responses); // Raw provider responses
+console.log(result.providerMetadata); // Provider-specific metadata
+```
+
+## Speech Providers & Models
+
+Several providers offer speech generation models:
+
+| Provider                                                              | Model      |
+| --------------------------------------------------------------------- | ---------- |
+| [OpenAI](/providers/ai-sdk-providers/openai#speech-models)            | `tts-1`    |
+| [OpenAI](/providers/ai-sdk-providers/openai#speech-models)            | `tts-1-hd` |
+| [ElevenLabs](/providers/ai-sdk-providers/elevenlabs#speech-models)    | Various    |
+| [LMNT](/providers/ai-sdk-providers/lmnt#speech-models)                | `aurora`   |

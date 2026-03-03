@@ -1,0 +1,232 @@
+---
+title: useCompletion
+description: API reference for the useCompletion hook
+---
+
+React hook for building text completion interfaces with AI language models.
+
+```typescript
+import { useCompletion } from 'ai/react';
+
+export default function Completion() {
+  const { completion, complete, isLoading } = useCompletion();
+
+  return (
+    <div>
+      <button onClick={() => complete('Write a poem about')}>
+        Generate
+      </button>
+      {isLoading && <div>Loading...</div>}
+      <div>{completion}</div>
+    </div>
+  );
+}
+```
+
+## Parameters
+
+<ParamField path="id" type="string">
+  A unique identifier for the completion. If not provided, a random ID will be generated.
+  When provided, the `useCompletion` hook with the same `id` will share states across components.
+</ParamField>
+
+<ParamField path="api" type="string" default="/api/completion">
+  The API endpoint that accepts a `{ prompt }` object and returns a stream of tokens of the completion response.
+</ParamField>
+
+<ParamField path="initialCompletion" type="string" default="''">
+  Initial completion value to be used in the component.
+</ParamField>
+
+<ParamField path="initialInput" type="string" default="''">
+  Initial input value to be used in the component.
+</ParamField>
+
+<ParamField path="credentials" type="RequestCredentials">
+  The credentials mode to be used for the fetch request.
+  Possible values are: `'omit'`, `'same-origin'`, `'include'`.
+</ParamField>
+
+<ParamField path="headers" type="Record<string, string> | Headers">
+  Additional headers to be sent with the request.
+</ParamField>
+
+<ParamField path="body" type="Record<string, unknown>">
+  Additional body fields to be sent with the request.
+</ParamField>
+
+<ParamField path="streamProtocol" type="'data' | 'text'" default="'data'">
+  The stream protocol to use.
+</ParamField>
+
+<ParamField path="fetch" type="FetchFunction">
+  Custom fetch implementation. You can use it as a middleware to intercept requests,
+  or to provide a custom fetch implementation for e.g. testing.
+</ParamField>
+
+<ParamField path="onFinish" type="(prompt: string, completion: string) => void">
+  Callback function to be called when the completion is complete.
+</ParamField>
+
+<ParamField path="onError" type="(error: Error) => void">
+  Callback function to be called when an error occurs.
+</ParamField>
+
+<ParamField path="experimental_throttle" type="number">
+  Custom throttle wait in milliseconds for the completion and data updates.
+  Default is undefined, which disables throttling.
+</ParamField>
+
+## Returns
+
+<ResponseField name="completion" type="string">
+  The current completion result.
+</ResponseField>
+
+<ResponseField name="complete" type="(prompt: string, options?: CompletionRequestOptions) => Promise<string | null | undefined>">
+  Send a new prompt to the API endpoint and update the completion state.
+</ResponseField>
+
+<ResponseField name="error" type="Error | undefined">
+  The error object if an error occurred.
+</ResponseField>
+
+<ResponseField name="stop" type="() => void">
+  Abort the current API request but keep the generated tokens.
+</ResponseField>
+
+<ResponseField name="setCompletion" type="(completion: string) => void">
+  Update the completion state locally.
+</ResponseField>
+
+<ResponseField name="input" type="string">
+  The current value of the input.
+</ResponseField>
+
+<ResponseField name="setInput" type="React.Dispatch<React.SetStateAction<string>>">
+  setState-powered method to update the input value.
+</ResponseField>
+
+<ResponseField name="handleInputChange" type="(event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void">
+  An input/textarea-ready onChange handler to control the value of the input.
+</ResponseField>
+
+<ResponseField name="handleSubmit" type="(event?: { preventDefault?: () => void }) => void">
+  Form submission handler to automatically reset input and trigger completion.
+</ResponseField>
+
+<ResponseField name="isLoading" type="boolean">
+  Whether the API request is in progress.
+</ResponseField>
+
+## Examples
+
+### Basic completion
+
+```typescript
+import { useCompletion } from 'ai/react';
+
+export default function Completion() {
+  const { completion, complete, isLoading } = useCompletion();
+
+  return (
+    <div>
+      <button
+        onClick={() => complete('Write a short poem about spring')}
+        disabled={isLoading}
+      >
+        {isLoading ? 'Generating...' : 'Generate Poem'}
+      </button>
+      <div>{completion}</div>
+    </div>
+  );
+}
+```
+
+### With form input
+
+```typescript
+import { useCompletion } from 'ai/react';
+
+export default function Completion() {
+  const {
+    completion,
+    input,
+    handleInputChange,
+    handleSubmit,
+    isLoading,
+  } = useCompletion();
+
+  return (
+    <div>
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={handleInputChange}
+          placeholder="Enter a prompt..."
+        />
+        <button type="submit" disabled={isLoading}>
+          {isLoading ? 'Generating...' : 'Generate'}
+        </button>
+      </form>
+      <div>{completion}</div>
+    </div>
+  );
+}
+```
+
+### With custom options
+
+```typescript
+import { useCompletion } from 'ai/react';
+
+export default function Completion() {
+  const { completion, complete, isLoading } = useCompletion({
+    api: '/api/custom-completion',
+    onFinish: (prompt, completion) => {
+      console.log('Finished:', completion);
+    },
+    onError: (error) => {
+      console.error('Error:', error);
+    },
+  });
+
+  return (
+    <div>
+      <button
+        onClick={() =>
+          complete('Write a story', {
+            body: { temperature: 0.8 },
+          })
+        }
+        disabled={isLoading}
+      >
+        Generate
+      </button>
+      <div>{completion}</div>
+    </div>
+  );
+}
+```
+
+### Streaming with stop
+
+```typescript
+import { useCompletion } from 'ai/react';
+
+export default function Completion() {
+  const { completion, complete, stop, isLoading } = useCompletion();
+
+  return (
+    <div>
+      <button onClick={() => complete('Write a long story')}>
+        Start
+      </button>
+      <button onClick={stop} disabled={!isLoading}>
+        Stop
+      </button>
+      <div>{completion}</div>
+    </div>
+  );
+}
+```

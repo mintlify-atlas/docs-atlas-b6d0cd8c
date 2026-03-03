@@ -1,0 +1,240 @@
+---
+title: Installation
+description: Learn how to install and configure the AI SDK in your project.
+---
+
+# Installation
+
+The AI SDK is available as npm packages. You can install the core SDK and optional provider packages based on your needs.
+
+## Requirements
+
+Before you begin, ensure you have:
+
+- **Node.js**: Version 18 or higher
+- **Package manager**: npm, pnpm, yarn, or bun
+
+## Install the core SDK
+
+The `ai` package contains the core SDK functionality including `generateText`, `streamText`, and other core APIs:
+
+<CodeGroup>
+```bash npm
+npm install ai
+```
+
+```bash pnpm
+pnpm add ai
+```
+
+```bash yarn
+yarn add ai
+```
+
+```bash bun
+bun add ai
+```
+</CodeGroup>
+
+## Choose a provider
+
+You have two options for accessing AI models:
+
+### Option 1: Vercel AI Gateway (recommended)
+
+The Vercel AI Gateway provides access to hundreds of models from different providers with a single API key. The gateway provider is included in the `ai` package by default.
+
+<Steps>
+  <Step title="Get an API key">
+    Sign up for a [Vercel AI Gateway API key](https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai%2Fapi-keys%3Futm_source%3Dgateway-models-page%26showCreateKeyModal%3Dtrue&title=Get+Started+with+Vercel+AI+Gateway)
+  </Step>
+  
+  <Step title="Add to environment">
+    Create a `.env.local` file in your project root:
+    
+    ```bash
+    touch .env.local
+    ```
+    
+    Add your API key:
+    
+    ```env filename=".env.local"
+    AI_GATEWAY_API_KEY=your_api_key_here
+    ```
+  </Step>
+  
+  <Step title="Start using models">
+    You can now access any model using a simple string:
+    
+    ```typescript
+    import { generateText } from 'ai';
+    
+    const { text } = await generateText({
+      model: 'openai/gpt-4o',
+      prompt: 'What is an agent?',
+    });
+    ```
+  </Step>
+</Steps>
+
+### Option 2: Direct provider packages
+
+Install specific provider packages to connect directly to AI services:
+
+<CodeGroup>
+```bash OpenAI
+npm install @ai-sdk/openai
+```
+
+```bash Anthropic
+npm install @ai-sdk/anthropic
+```
+
+```bash Google
+npm install @ai-sdk/google
+```
+
+```bash Mistral
+npm install @ai-sdk/mistral
+```
+</CodeGroup>
+
+Then configure your provider credentials:
+
+```env filename=".env.local"
+OPENAI_API_KEY=your_openai_key_here
+ANTHROPIC_API_KEY=your_anthropic_key_here
+```
+
+Use the provider in your code:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
+
+// OpenAI
+const result1 = await generateText({
+  model: openai('gpt-4o'),
+  prompt: 'What is an agent?',
+});
+
+// Anthropic
+const result2 = await generateText({
+  model: anthropic('claude-sonnet-4-5'),
+  prompt: 'What is an agent?',
+});
+```
+
+## Framework-specific packages
+
+If you're building chat or generative UI applications, install the framework integration for your UI library:
+
+<CodeGroup>
+```bash React
+npm install @ai-sdk/react
+```
+
+```bash Vue
+npm install @ai-sdk/vue
+```
+
+```bash Svelte
+npm install @ai-sdk/svelte
+```
+
+```bash Angular
+npm install @ai-sdk/angular
+```
+</CodeGroup>
+
+These packages provide hooks and utilities for building chat interfaces:
+
+```typescript
+import { useChat } from '@ai-sdk/react';
+
+export default function ChatComponent() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat();
+  
+  // Build your chat UI
+}
+```
+
+## Additional packages
+
+Depending on your use case, you may need additional packages:
+
+### Schema validation
+
+For structured outputs and tool definitions, install Zod:
+
+```bash
+npm install zod
+```
+
+### Next.js RSC (React Server Components)
+
+For Next.js applications using React Server Components:
+
+```bash
+npm install ai @ai-sdk/react
+```
+
+## Verify installation
+
+Create a simple test file to verify your installation:
+
+```typescript filename="test.ts"
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = await generateText({
+  model: openai('gpt-4o'),
+  prompt: 'Say hello!',
+});
+
+console.log(result.text);
+```
+
+Run the file:
+
+```bash
+node --loader ts-node/esm test.ts
+```
+
+<Note>
+Make sure you've set up your API keys in the `.env.local` file before running the test.
+</Note>
+
+## TypeScript configuration
+
+The AI SDK is written in TypeScript and provides full type safety. Ensure your `tsconfig.json` includes:
+
+```json filename="tsconfig.json"
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "lib": ["ES2020"],
+    "moduleResolution": "bundler",
+    "strict": true
+  }
+}
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build your first AI application
+  </Card>
+  <Card title="Providers" icon="server" href="/providers">
+    Learn about available AI providers
+  </Card>
+  <Card title="AI SDK Core" icon="code" href="/ai-sdk-core">
+    Explore core functions and APIs
+  </Card>
+  <Card title="AI SDK UI" icon="browser" href="/ai-sdk-ui">
+    Build chat and generative interfaces
+  </Card>
+</CardGroup>
