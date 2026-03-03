@@ -1,0 +1,267 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "AI SDK",
+  "projectDescription": "The TypeScript toolkit for building AI-powered applications and agents with React, Next.js, Vue, Svelte, and Node.js",
+  "theme": "palm",
+  "primaryColor": "#0070F3",
+  "lightColor": "#3291FF",
+  "darkColor": "#0761D1",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Foundations",
+            "pages": [
+              "foundations/overview",
+              "foundations/providers-and-models",
+              "foundations/prompts",
+              "foundations/tools",
+              "foundations/streaming"
+            ]
+          },
+          {
+            "group": "AI SDK Core",
+            "pages": [
+              "ai-sdk-core/overview",
+              "ai-sdk-core/generating-text",
+              "ai-sdk-core/generating-structured-data",
+              "ai-sdk-core/tools-and-tool-calling",
+              "ai-sdk-core/mcp-tools",
+              "ai-sdk-core/prompt-engineering",
+              "ai-sdk-core/settings",
+              "ai-sdk-core/embeddings",
+              "ai-sdk-core/reranking",
+              "ai-sdk-core/image-generation",
+              "ai-sdk-core/transcription",
+              "ai-sdk-core/speech",
+              "ai-sdk-core/video-generation",
+              "ai-sdk-core/middleware",
+              "ai-sdk-core/provider-management",
+              "ai-sdk-core/error-handling",
+              "ai-sdk-core/testing",
+              "ai-sdk-core/telemetry",
+              "ai-sdk-core/devtools"
+            ]
+          },
+          {
+            "group": "Agents",
+            "pages": [
+              "agents/overview",
+              "agents/building-agents",
+              "agents/workflows",
+              "agents/loop-control",
+              "agents/configuring-call-options",
+              "agents/memory",
+              "agents/subagents"
+            ]
+          },
+          {
+            "group": "AI SDK UI",
+            "pages": [
+              "ai-sdk-ui/overview",
+              "ai-sdk-ui/chatbot",
+              "ai-sdk-ui/chatbot-message-persistence",
+              "ai-sdk-ui/chatbot-resume-streams",
+              "ai-sdk-ui/chatbot-tool-usage",
+              "ai-sdk-ui/generative-user-interfaces",
+              "ai-sdk-ui/completion",
+              "ai-sdk-ui/object-generation",
+              "ai-sdk-ui/streaming-data",
+              "ai-sdk-ui/error-handling",
+              "ai-sdk-ui/transport",
+              "ai-sdk-ui/reading-ui-message-streams",
+              "ai-sdk-ui/message-metadata",
+              "ai-sdk-ui/stream-protocol"
+            ]
+          },
+          {
+            "group": "AI SDK RSC",
+            "pages": [
+              "ai-sdk-rsc/overview",
+              "ai-sdk-rsc/streaming-react-components",
+              "ai-sdk-rsc/generative-ui"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/custom-providers",
+              "advanced/middleware-implementation",
+              "advanced/error-recovery"
+            ]
+          },
+          {
+            "group": "Troubleshooting",
+            "pages": [
+              "troubleshooting/common-issues",
+              "troubleshooting/debugging"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Providers",
+        "groups": [
+          {
+            "group": "AI SDK Providers",
+            "pages": [
+              "providers/ai-sdk-providers/openai",
+              "providers/ai-sdk-providers/anthropic",
+              "providers/ai-sdk-providers/google-generative-ai",
+              "providers/ai-sdk-providers/google-vertex",
+              "providers/ai-sdk-providers/azure",
+              "providers/ai-sdk-providers/amazon-bedrock",
+              "providers/ai-sdk-providers/mistral",
+              "providers/ai-sdk-providers/cohere",
+              "providers/ai-sdk-providers/xai"
+            ]
+          },
+          {
+            "group": "OpenAI Compatible",
+            "pages": [
+              "providers/openai-compatible/groq",
+              "providers/openai-compatible/perplexity",
+              "providers/openai-compatible/fireworks",
+              "providers/openai-compatible/togetherai"
+            ]
+          },
+          {
+            "group": "Community Providers",
+            "pages": [
+              "providers/community-providers/overview"
+            ]
+          },
+          {
+            "group": "Adapters",
+            "pages": [
+              "providers/adapters/langchain",
+              "providers/adapters/llamaindex"
+            ]
+          },
+          {
+            "group": "Observability",
+            "pages": [
+              "providers/observability/overview"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Functions",
+            "pages": [
+              "reference/ai-sdk-core/generate-text",
+              "reference/ai-sdk-core/stream-text",
+              "reference/ai-sdk-core/generate-object",
+              "reference/ai-sdk-core/stream-object",
+              "reference/ai-sdk-core/embed",
+              "reference/ai-sdk-core/embed-many"
+            ]
+          },
+          {
+            "group": "Agents",
+            "pages": [
+              "reference/agents/tool-loop-agent",
+              "reference/agents/workflow-agent"
+            ]
+          },
+          {
+            "group": "UI Hooks",
+            "pages": [
+              "reference/ai-sdk-ui/use-chat",
+              "reference/ai-sdk-ui/use-completion",
+              "reference/ai-sdk-ui/use-object"
+            ]
+          },
+          {
+            "group": "RSC",
+            "pages": [
+              "reference/ai-sdk-rsc/stream-ui",
+              "reference/ai-sdk-rsc/create-stream-ui"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "reference/utilities/tool",
+              "reference/utilities/json-schema",
+              "reference/utilities/zod-schema"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Examples",
+        "groups": [
+          {
+            "group": "Guides",
+            "pages": [
+              "examples/rag-chatbot",
+              "examples/multi-modal-chatbot",
+              "examples/slackbot",
+              "examples/natural-language-postgres",
+              "examples/computer-use",
+              "examples/agent-skills"
+            ]
+          },
+          {
+            "group": "Frameworks",
+            "pages": [
+              "examples/next-js",
+              "examples/express",
+              "examples/fastify",
+              "examples/nuxt"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Unified API for multiple AI providers (OpenAI, Anthropic, Google, etc.)",
+    "Text generation and streaming with generateText and streamText",
+    "Structured data generation with generateObject and streamObject",
+    "Tool calling and function execution",
+    "Agent framework with ToolLoopAgent and WorkflowAgent",
+    "React hooks for building chat and generative UIs",
+    "Support for embeddings, image generation, speech, and video",
+    "Framework-agnostic with integrations for React, Vue, Svelte, Angular",
+    "Middleware support for caching, logging, and custom behavior",
+    "Comprehensive error handling and telemetry"
+  ],
+  "publicApiSurface": [
+    "generateText()",
+    "streamText()",
+    "generateObject()",
+    "streamObject()",
+    "embed()",
+    "embedMany()",
+    "generateImage()",
+    "generateSpeech()",
+    "generateVideo()",
+    "transcribe()",
+    "rerank()",
+    "tool()",
+    "jsonSchema()",
+    "zodSchema()",
+    "ToolLoopAgent",
+    "WorkflowAgent",
+    "useChat()",
+    "useCompletion()",
+    "useObject()",
+    "streamUI()",
+    "createStreamableUI()"
+  ]
+}
